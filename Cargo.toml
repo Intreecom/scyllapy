@@ -1,0 +1,27 @@
+[package]
+name = "chatty-scylla"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "chatty_scylla"
+crate-type = ["cdylib"]
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.75"
+log = "0.4.20"
+openssl = "0.10.56"
+pyo3 = { version = "0.19.2", features = ["auto-initialize", "anyhow"] }
+pyo3-asyncio = { version = "0.19.0", features = ["tokio-runtime"] }
+pyo3-log = "0.8.3"
+scylla = { version = "0.9.0", features = ["ssl"] }
+tokio = { version = "1.32.0", features = ["bytes", "rt", "macros"] }
+uuid = { version = "1.4.1", features = ["v4"] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+debug = false
+panic = "abort"

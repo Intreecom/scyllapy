@@ -1,0 +1,16 @@
+from typing import Any
+from ._dtos import InboxDTO
+
+class ScyllaDAOs:
+    def __init__(
+        self,
+        contact_points: list[str],
+        username: str,
+        password: str,
+        keyspace: str,
+        cert_data: str | None = None,
+    ) -> None: ...
+    def asleep(self, secs: int) -> None: ...
+    async def startup(self) -> None: ...
+    async def exec_query(self, query: str, params: dict[str, Any]) -> None: ...
+    async def get_inbox(self) -> list[InboxDTO]: ...
