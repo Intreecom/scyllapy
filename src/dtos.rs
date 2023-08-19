@@ -1,4 +1,4 @@
-use pyo3::{pyclass, IntoPy, Py, PyAny, ToPyObject};
+use pyo3::{pyclass, IntoPy, Py, PyAny};
 use scylla::{
     FromRow,
     _macro_internal::{CqlValue, Row},

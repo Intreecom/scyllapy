@@ -1,5 +1,7 @@
-from typing import Any
+from typing import Any, Callable, Iterable, Literal, Optional, TypeVar, overload
 from ._dtos import InboxDTO
+
+T = TypeVar("T")
 
 class ScyllaDAOs:
     def __init__(
@@ -10,7 +12,24 @@ class ScyllaDAOs:
         keyspace: str,
         cert_data: str | None = None,
     ) -> None: ...
-    def asleep(self, secs: int) -> None: ...
     async def startup(self) -> None: ...
-    async def exec_query(self, query: str, params: dict[str, Any]) -> None: ...
-    async def get_inbox(self) -> list[InboxDTO]: ...
+    @overload
+    async def execute(
+        self,
+        query: str,
+        params: Optional[Iterable[Any]] = None,
+        as_class: Literal[None] = None,
+    ) -> list[dict[str, Any]]: ...
+    @overload
+    async def execute(
+        self,
+        query: str,
+        params: Optional[Iterable[Any]] = None,
+        as_class: Optional[Callable[..., T]] = None,
+    ) -> list[T]: ...
+    async def execute(
+        self,
+        query: str,
+        params: Optional[Iterable[Any]] = None,
+        as_class: Any = None,
+    ) -> Any: ...

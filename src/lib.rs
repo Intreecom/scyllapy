@@ -1,20 +1,18 @@
 mod dtos;
 mod utils;
 
-use std::{any, collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc};
 
-use dtos::InboxDTO;
 use openssl::{
     ssl::{SslContextBuilder, SslMethod, SslVerifyMode},
     x509::X509,
 };
 use pyo3::{
-    exceptions::PyValueError,
-    pyclass, pymethods, pymodule,
-    types::{PyList, PyModule, PyIterator},
-    IntoPy, Py, PyAny, PyErr, PyObject, PyRef, PyResult, Python,
+    exceptions::PyValueError, pyclass, pymethods, pymodule, types::PyModule, IntoPy, Py, PyAny,
+    PyErr, PyObject, PyResult, Python, ToPyObject,
 };
 use scylla::{_macro_internal::ValueList, query::Query, QueryResult};
+use utils::{cql_to_py, py_to_cql_value};
 
 use crate::utils::anyhow_py_future;
 
@@ -78,13 +76,6 @@ impl ScyllaDAOs {
         })
     }
 
-    pub fn asleep(self_: PyRef<'_, Self>, secs: u64) -> PyResult<&PyAny> {
-        pyo3_asyncio::tokio::future_into_py(self_.py(), async move {
-            tokio::time::sleep(Duration::from_secs(secs)).await;
-            Ok(())
-        })
-    }
-
     pub fn startup<'a>(&'a self, py: Python<'a>) -> anyhow::Result<&'a PyAny> {
         log::debug!("Initializing scylla pool.");
         let contact_points = self.contact_points.clone();
@@ -123,37 +114,20 @@ impl ScyllaDAOs {
         .map_err(Into::into)
     }
 
-    #[pyo3(signature = (query, params = None))]
-    pub fn exec_query<'a>(
-        &'a self,
-        py: Python<'a>,
-        query: String,
-        params: Option<&'a PyList>,
-    ) -> anyhow::Result<&'a PyAny> {
-        self._exec(py, query, &[], move |res| {
-            for row in res.rows()? {
-                log::info!("{:?}", row);
-            }
-            Ok(())
-        })
-    }
-
-    fn sleep_for<'p>(&self, py: Python<'p>, secs: &'p PyAny) -> PyResult<&'p PyAny> {
-        let secs = secs.extract()?;
-        pyo3_asyncio::tokio::future_into_py(py, async move {
-            tokio::time::sleep(Duration::from_secs(secs)).await;
-            Python::with_gil(|py| Ok(py.None()))
-        })
-    }
-
     #[pyo3(signature = (query, params = None, as_class = None))]
-    pub fn exec_cls<'a>(
+    pub fn execute<'a>(
         &'a self,
         py: Python<'a>,
         query: String,
-        params: Option<&'a PyIterator>,
+        params: Option<&'a PyAny>,
         as_class: Option<PyObject>,
     ) -> anyhow::Result<&'a PyAny> {
+        let mut query_params = Vec::new();
+        if let Some(passed_params) = params {
+            for item in passed_params.iter()? {
+                query_params.push(py_to_cql_value(item?)?);
+            }
+        }
         let session_arc = self.scylla_session.clone();
         anyhow_py_future(py, async move {
             let session_guard = session_arc.read().await;
@@ -161,10 +135,31 @@ impl ScyllaDAOs {
                 return Err(PyValueError::new_err("Session is not initialized.").into());
             }
             let session = session_guard.as_ref().unwrap();
-            let res = session.query(query, &[]).await?;
+            let cql_query = Query::new(query);
+            let res = session.query(cql_query, query_params).await?;
             log::debug!("Query executed!");
+            let specs = res.col_specs.clone();
+            if let Ok(rows) = res.rows() {
+                Python::with_gil(|py| {
+                    let mut dumped_rows = Vec::new();
+                    for row in rows {
+                        let mut map = HashMap::new();
+                        let mut index = 0;
+                        for col in row.columns {
+                            map.insert(
+                                specs[index].name.as_str(),
+                                cql_to_py(py, &specs[index].typ, col)?,
+                            );
+                            index += 1;
+                        }
+                        dumped_rows.push(map);
+                    }
+                    Ok(Some(dumped_rows.to_object(py)))
+                })
+            } else {
+                Ok(None)
+            }
             // as_class.unwrap().call1(py, (1,));
-            Ok(())
         })
         .map_err(Into::into)
     }
