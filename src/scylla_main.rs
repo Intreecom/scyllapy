@@ -4,10 +4,7 @@ use openssl::{
     ssl::{SslContextBuilder, SslMethod, SslVerifyMode},
     x509::X509,
 };
-use pyo3::{
-    exceptions::PyValueError, pyclass, pymethods, types::PyDict, PyAny, PyErr, PyObject, Python,
-    ToPyObject,
-};
+use pyo3::{pyclass, pymethods, types::PyDict, PyAny, PyObject, Python, ToPyObject};
 use scylla::query::Query;
 
 use crate::utils::{anyhow_py_future, cql_to_py, py_to_cql_value};
@@ -53,6 +50,16 @@ impl Scylla {
         }
     }
 
+    /// Start the session.
+    ///
+    /// Here we create a new scylla session
+    /// and save it in our structure.
+    ///
+    /// # Errors
+    /// May return an error in several cases:
+    /// * The session is already initialized;
+    /// * Username passed without password and vice versa;
+    /// * Cannot connect to the database.
     pub fn startup<'a>(&'a self, py: Python<'a>) -> anyhow::Result<&'a PyAny> {
         log::debug!("Initializing scylla pool.");
         let contact_points = self.contact_points.clone();
@@ -72,12 +79,11 @@ impl Scylla {
         let conn_timeout = self.connection_timeout;
         anyhow_py_future(py, async move {
             if scylla_session.read().await.is_some() {
-                return Err(PyErr::new::<PyValueError, _>("meme").into());
+                return Err(anyhow::anyhow!("Session already initialized."));
             }
             let mut session_builder = scylla::SessionBuilder::new()
                 .ssl_context(ssl_context)
                 .known_nodes(contact_points);
-            log::debug!("Adding known contact points.");
             match (username, password) {
                 (Some(user), Some(pass)) => session_builder = session_builder.user(user, pass),
                 (None, None) => {}
@@ -101,6 +107,12 @@ impl Scylla {
         .map_err(Into::into)
     }
 
+    /// Close current session, free resources.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if session wasn't initialized before
+    /// calling this method.
     pub fn shutdown<'a>(&'a self, py: Python<'a>) -> anyhow::Result<&'a PyAny> {
         let session = self.scylla_session.clone();
         anyhow_py_future(py, async move {
@@ -114,6 +126,17 @@ impl Scylla {
         })
     }
 
+    /// Execute a query.
+    ///
+    /// This function takes a query and other parameters
+    /// for performing actual request to the database.
+    ///
+    /// It creates a python future and executes
+    /// the query, using it's `scylla_session`.
+    ///
+    /// # Errors
+    ///
+    /// Can result in an error in any case, when something goes wrong.
     #[pyo3(signature = (query, params = None, as_class = None))]
     pub fn execute<'a>(
         &'a self,
@@ -122,23 +145,35 @@ impl Scylla {
         params: Option<&'a PyAny>,
         as_class: Option<PyObject>,
     ) -> anyhow::Result<&'a PyAny> {
+        // We need to prepare parameter we're going to use
+        // in query.
         let mut query_params = Vec::new();
+        // If parameters were passed, we parse python values,
+        // to corresponding CQL values.
         if let Some(passed_params) = params {
             for item in passed_params.iter()? {
                 query_params.push(py_to_cql_value(item?)?);
             }
         }
+        // We need this clone, to safely share the session between threads.
         let session_arc = self.scylla_session.clone();
         anyhow_py_future(py, async move {
             let session_guard = session_arc.read().await;
             let session = session_guard
                 .as_ref()
                 .ok_or(anyhow::anyhow!("Session is not initialized."))?;
+            // We construct query, using passed query string.
             let cql_query = Query::new(query);
             let res = session.query(cql_query, query_params).await?;
             log::debug!("Query executed!");
+            // Column specs is a class that holds information
+            // about all columns returned by the query.
             let specs = res.col_specs.clone();
             if let Ok(rows) = res.rows() {
+                // We need to enable GIL here,
+                // because we're going to create references
+                // in Python's heap memory, so everything
+                // returned by the query may be accessed from python.
                 Python::with_gil(|py| {
                     let mut dumped_rows = Vec::new();
                     for row in rows {
@@ -146,17 +181,21 @@ impl Scylla {
                         for (index, col) in row.columns.into_iter().enumerate() {
                             map.insert(
                                 specs[index].name.as_str(),
+                                // Here we convert returned row to python-native type.
                                 cql_to_py(py, &specs[index].typ, col)?,
                             );
                         }
                         dumped_rows.push(map);
                     }
+                    // If user wants to use custom DTO for rows,
+                    // we use call it for every row.
                     if let Some(parser) = as_class {
                         let mut result = Vec::new();
                         for row in dumped_rows {
                             result.push(parser.call(
                                 py,
                                 (),
+                                // Here we pass returned fields as kwargs.
                                 Some(row.to_object(py).downcast::<PyDict>(py).map_err(|_| {
                                     anyhow::anyhow!("Cannot prepare data for calling function")
                                 })?),

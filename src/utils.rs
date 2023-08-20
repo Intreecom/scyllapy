@@ -9,6 +9,16 @@ use scylla::{
     frame::response::result::ColumnType,
 };
 
+/// Small function to integrate anyhow result
+/// and `pyo3_asyncio`.
+///
+/// It's almost the same as `future_into_py`,
+/// but it expects future to return anyhow result, rather
+/// than `PyResult` from `pyo3`. It's useful for using `?` operators all over the place.
+///
+/// # Errors
+///
+/// If result of a future was unsuccessful, it propagates the error.
 pub fn anyhow_py_future<F, T>(py: Python<'_>, fut: F) -> anyhow::Result<&PyAny>
 where
     F: Future<Output = anyhow::Result<T>> + Send + 'static,
@@ -19,6 +29,15 @@ where
     Ok(res)
 }
 
+/// Convert python type to CQL value.
+///
+/// This function is used to convert parameters, passed from
+/// python to convinient `CQLValue` type. All these values are
+/// going to be used in parameter bindings for query.
+///
+/// # Errors
+/// It can raise an error if type cannot be extracted,
+/// or if type is unsupported.
 pub fn py_to_cql_value(item: &PyAny) -> anyhow::Result<Box<dyn Value + Send>> {
     if item.is_instance_of::<PyString>() {
         return Ok(Box::new(item.extract::<String>()?));
@@ -50,6 +69,22 @@ pub fn py_to_cql_value(item: &PyAny) -> anyhow::Result<Box<dyn Value + Send>> {
     ))
 }
 
+/// Convert CQL type from database to Python.
+///
+/// This function takes a CQL value from database
+/// response and converts it to some python type,
+/// loading it in interpreter, so it can be referenced
+/// from python code.
+///
+/// `cql_type` is the type that database sent to us.
+/// Used to parse the value with appropriate parser.
+///
+///
+/// # Errors
+///
+/// This function can throw an error, if it was unable
+/// to parse thr type, or if type is not supported.
+#[allow(clippy::too_many_lines)]
 pub fn cql_to_py<'a>(
     py: Python<'a>,
     cql_type: &'a ColumnType,
