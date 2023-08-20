@@ -30,7 +30,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Instal OpenSSL
-        run: sudo apt-get update && sudo apt-get install libssl-dev
+        run: sudo apt-get update && sudo apt-get install libssl-dev openssl
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
