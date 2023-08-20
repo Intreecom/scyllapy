@@ -1,3 +1,6 @@
+[project]
+name = "scyllapy"
+
 [tool.maturin]
 python-source = "python"
 module-name = "scyllapy._internal"
