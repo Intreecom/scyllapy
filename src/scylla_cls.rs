@@ -9,10 +9,10 @@ use pyo3::{
     types::{PyDict, PyList},
     PyAny, PyObject, Python, ToPyObject,
 };
-use scylla::{frame::types::Consistency as ScyllaConsistency, query::Query};
+use scylla::query::Query;
 
 use crate::{
-    consistency::Consistency,
+    inputs::QueryInput,
     utils::{anyhow_py_future, cql_to_py, py_to_cql_value},
 };
 
@@ -144,13 +144,12 @@ impl Scylla {
     /// # Errors
     ///
     /// Can result in an error in any case, when something goes wrong.
-    #[pyo3(signature = (query, params = None, consistency = None, as_class = None))]
+    #[pyo3(signature = (query, params = None, as_class = None))]
     pub fn execute<'a>(
         &'a self,
         py: Python<'a>,
-        query: String,
+        query: QueryInput,
         params: Option<&'a PyAny>,
-        consistency: Option<Consistency>,
         as_class: Option<PyObject>,
     ) -> anyhow::Result<&'a PyAny> {
         // We need to prepare parameter we're going to use
@@ -165,17 +164,13 @@ impl Scylla {
         }
         // We need this clone, to safely share the session between threads.
         let session_arc = self.scylla_session.clone();
-        let consistency = consistency.map(ScyllaConsistency::from);
+        let cql_query = Query::from(query);
         anyhow_py_future(py, async move {
             let session_guard = session_arc.read().await;
             let session = session_guard
                 .as_ref()
                 .ok_or(anyhow::anyhow!("Session is not initialized."))?;
             // We construct query, using passed query string.
-            let mut cql_query = Query::new(query);
-            if let Some(consistency) = consistency {
-                cql_query.set_consistency(consistency);
-            }
             let res = session.query(cql_query, query_params).await?;
             log::debug!("Query executed!");
             // Column specs is a class that holds information
