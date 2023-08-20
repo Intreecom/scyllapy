@@ -1,9 +1,8 @@
 from typing import Any, Callable, Iterable, Literal, Optional, TypeVar, overload
-from ._dtos import InboxDTO
 
 T = TypeVar("T")
 
-class ScyllaDAOs:
+class Scylla:
     def __init__(
         self,
         contact_points: list[str],
@@ -13,6 +12,7 @@ class ScyllaDAOs:
         cert_data: str | None = None,
     ) -> None: ...
     async def startup(self) -> None: ...
+    async def shutdown(self) -> None: ...
     @overload
     async def execute(
         self,

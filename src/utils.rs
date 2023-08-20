@@ -1,7 +1,7 @@
 use std::future::Future;
 
 use pyo3::{
-    types::{PyBool, PyBytes, PyFloat, PyInt, PyList, PySet, PyString, PyTuple},
+    types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PySet, PyString, PyTuple},
     IntoPy, PyAny, PyObject, Python, ToPyObject,
 };
 use scylla::{
@@ -50,7 +50,6 @@ pub fn py_to_cql_value(item: &PyAny) -> anyhow::Result<Box<dyn Value + Send>> {
     ))
 }
 
-#[inline]
 pub fn cql_to_py<'a>(
     py: Python<'a>,
     cql_type: &'a ColumnType,
@@ -61,7 +60,6 @@ pub fn cql_to_py<'a>(
     }
     let unwrapped_value = cql_value.unwrap();
     match cql_type {
-        ColumnType::Custom(_) => Err(anyhow::anyhow!("Custom types are not yet supported.")),
         ColumnType::Ascii => unwrapped_value
             .as_ascii()
             .ok_or(anyhow::anyhow!("Cannot parse"))
@@ -74,12 +72,14 @@ pub fn cql_to_py<'a>(
             .as_blob()
             .ok_or(anyhow::anyhow!("Cannot parse"))
             .map(|val| PyBytes::new(py, val.as_ref()).as_ref()),
-        ColumnType::Counter => todo!(),
-        ColumnType::Date => todo!(),
-        ColumnType::Decimal => todo!(),
-        ColumnType::Double => todo!(),
-        ColumnType::Duration => todo!(),
-        ColumnType::Float => todo!(),
+        ColumnType::Double => unwrapped_value
+            .as_double()
+            .ok_or(anyhow::anyhow!("Cannot parse"))
+            .map(|val| val.to_object(py).into_ref(py)),
+        ColumnType::Float => unwrapped_value
+            .as_double()
+            .ok_or(anyhow::anyhow!("Cannot parse"))
+            .map(|val| val.to_object(py).into_ref(py)),
         ColumnType::Int => unwrapped_value
             .as_int()
             .ok_or(anyhow::anyhow!("Cannot parse"))
@@ -92,29 +92,52 @@ pub fn cql_to_py<'a>(
             .as_text()
             .ok_or(anyhow::anyhow!("Cannot parse"))
             .map(|val| val.to_object(py).into_ref(py)),
-        ColumnType::Timestamp => todo!(),
-        ColumnType::Inet => todo!(),
-        ColumnType::List(column_types) => {
+        ColumnType::List(column_type) => {
             let items = unwrapped_value
                 .as_list()
-                .ok_or(anyhow::anyhow!("Cannot parse value."))?
-                .into_iter()
-                .map(|val| cql_to_py(py, column_types.as_ref(), Some(val.to_owned())))
-                .collect::<Result<Vec<_>, _>>();
-            Ok(items?.to_object(py).into_ref(py))
+                .ok_or(anyhow::anyhow!("Cannot parse"))?
+                .iter()
+                .map(|val| cql_to_py(py, column_type.as_ref(), Some(val.clone())))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(items.to_object(py).into_ref(py))
         }
-        ColumnType::Map(_, _) => todo!(),
-        ColumnType::Set(_) => todo!(),
-        ColumnType::UserDefinedType {
-            type_name: _,
-            keyspace: _,
-            field_types: _,
-        } => todo!(),
-        ColumnType::SmallInt => todo!(),
-        ColumnType::TinyInt => todo!(),
-        ColumnType::Time => todo!(),
-        ColumnType::Timeuuid => todo!(),
-        ColumnType::Tuple(_) => todo!(),
+        ColumnType::Map(key_type, val_type) => {
+            let map_values = unwrapped_value
+                .as_map()
+                .ok_or(anyhow::anyhow!("Cannot parse"))?
+                .iter()
+                .map(|(key, val)| -> anyhow::Result<(&'a PyAny, &'a PyAny)> {
+                    Ok((
+                        cql_to_py(py, key_type, Some(key.clone()))?,
+                        cql_to_py(py, val_type, Some(val.clone()))?,
+                    ))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let res_map = PyDict::new(py);
+            for (key, value) in map_values {
+                res_map.set_item(key, value)?;
+            }
+            Ok(res_map)
+        }
+        ColumnType::Set(column_type) => {
+            let items = unwrapped_value
+                .as_set()
+                .ok_or(anyhow::anyhow!("Cannot parse"))?
+                .iter()
+                .map(|val| cql_to_py(py, column_type.as_ref(), Some(val.clone())))
+                .collect::<Result<Vec<_>, _>>()?;
+            let res_set = PySet::new(py, items)?;
+            Ok(res_set)
+        }
+        ColumnType::SmallInt => unwrapped_value
+            .as_smallint()
+            .ok_or(anyhow::anyhow!("Cannot parse"))
+            .map(|val| val.to_object(py).into_ref(py)),
+        ColumnType::TinyInt => unwrapped_value
+            .as_tinyint()
+            .ok_or(anyhow::anyhow!("Cannot parse"))
+            .map(|val| val.to_object(py).into_ref(py)),
         ColumnType::Uuid => {
             let uuid_str = unwrapped_value
                 .as_uuid()
@@ -123,6 +146,21 @@ pub fn cql_to_py<'a>(
                 .to_string();
             Ok(py.import("uuid")?.getattr("UUID")?.call1((uuid_str,))?)
         }
-        ColumnType::Varint => todo!(),
+        ColumnType::Custom(_) => Err(anyhow::anyhow!("Custom types are not yet supported.")),
+        ColumnType::Counter => Err(anyhow::anyhow!("Counter is not yet supported.")),
+        ColumnType::Varint => Err(anyhow::anyhow!("Variant is not yet supported.")),
+        ColumnType::Time => Err(anyhow::anyhow!("Time is not yet supported.")),
+        ColumnType::Timestamp => Err(anyhow::anyhow!("Timestamp is not yet supported.")),
+        ColumnType::Inet => Err(anyhow::anyhow!("Inet is not yet supported.")),
+        ColumnType::Date => Err(anyhow::anyhow!("Date is not yet supported.")),
+        ColumnType::Duration => Err(anyhow::anyhow!("Duration is not yet supported.")),
+        ColumnType::Timeuuid => Err(anyhow::anyhow!("TimeUUID is not yet supported.")),
+        ColumnType::Tuple(_) => Err(anyhow::anyhow!("Tuple is not yet supported.")),
+        ColumnType::Decimal => Err(anyhow::anyhow!("Decimals are not yet supported.")),
+        ColumnType::UserDefinedType {
+            type_name: _,
+            keyspace: _,
+            field_types: _,
+        } => Err(anyhow::anyhow!("UDT is not yet supported.")),
     }
 }

@@ -1,3 +1,3 @@
-from ._internal import ScyllaDAOs
+from ._internal import Scylla
 
-__all__ = ['ScyllaDAOs']
+__all__ = ['Scylla']
