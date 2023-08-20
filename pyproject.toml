@@ -1,6 +1,6 @@
 [tool.maturin]
 python-source = "python"
-module-name = "chatty_scylla._internal"
+module-name = "scyllapy._internal"
 
 [build-system]
 requires = ["maturin>=1.0,<2.0"]

@@ -1,10 +1,10 @@
 [package]
-name = "chatty-scylla"
+name = "scyllapy"
 version = "0.1.1"
 edition = "2021"
 
 [lib]
-name = "chatty_scylla"
+name = "scyllapy"
 crate-type = ["cdylib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
