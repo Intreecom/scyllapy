@@ -41,6 +41,7 @@ class Scylla:
         self,
         query: str,
         params: Optional[Iterable[Any]] = None,
+        consistency: Consistency | None = None,
         as_class: Literal[None] = None,
     ) -> list[dict[str, Any]]: ...
     @overload
@@ -48,12 +49,14 @@ class Scylla:
         self,
         query: str,
         params: Optional[Iterable[Any]] = None,
+        consistency: Consistency | None = None,
         as_class: Optional[Callable[..., T]] = None,
     ) -> list[T]: ...
     async def execute(
         self,
         query: str,
         params: Optional[Iterable[Any]] = None,
+        consistency: Consistency | None = None,
         as_class: Any = None,
     ) -> Any:
         """
@@ -70,3 +73,14 @@ class Scylla:
         :param params: list of query parameters.
         :param as_class: DTO class to use for parsing rows (Can be pydantic model or dataclass).
         """
+
+class Consistency:
+    ANY: "Consistency"
+    ONE: "Consistency"
+    TWO: "Consistency"
+    THREE: "Consistency"
+    QUORUM: "Consistency"
+    ALL: "Consistency"
+    LOCAL_QUORUM: "Consistency"
+    EACH_QUORUM: "Consistency"
+    LOCAL_ONE: "Consistency"

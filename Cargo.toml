@@ -1,6 +1,6 @@
 [package]
 name = "scyllapy"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 
 [lib]
@@ -11,7 +11,7 @@ crate-type = ["cdylib"]
 [dependencies]
 anyhow = "1.0.75"
 log = "0.4.20"
-openssl = "0.10.56"
+openssl = { version = "0.10.56", features = ["vendored"] }
 pyo3 = { version = "0.19.2", features = [
     "auto-initialize",
     "anyhow",

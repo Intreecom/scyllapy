@@ -4,12 +4,19 @@ use openssl::{
     ssl::{SslContextBuilder, SslMethod, SslVerifyMode},
     x509::X509,
 };
-use pyo3::{pyclass, pymethods, types::PyDict, PyAny, PyObject, Python, ToPyObject};
-use scylla::query::Query;
+use pyo3::{
+    pyclass, pymethods,
+    types::{PyDict, PyList},
+    PyAny, PyObject, Python, ToPyObject,
+};
+use scylla::{frame::types::Consistency as ScyllaConsistency, query::Query};
 
-use crate::utils::{anyhow_py_future, cql_to_py, py_to_cql_value};
+use crate::{
+    consistency::Consistency,
+    utils::{anyhow_py_future, cql_to_py, py_to_cql_value},
+};
 
-#[pyclass]
+#[pyclass(frozen, weakref)]
 pub struct Scylla {
     contact_points: Vec<String>,
     username: Option<String>,
@@ -137,12 +144,13 @@ impl Scylla {
     /// # Errors
     ///
     /// Can result in an error in any case, when something goes wrong.
-    #[pyo3(signature = (query, params = None, as_class = None))]
+    #[pyo3(signature = (query, params = None, consistency = None, as_class = None))]
     pub fn execute<'a>(
         &'a self,
         py: Python<'a>,
         query: String,
         params: Option<&'a PyAny>,
+        consistency: Option<Consistency>,
         as_class: Option<PyObject>,
     ) -> anyhow::Result<&'a PyAny> {
         // We need to prepare parameter we're going to use
@@ -157,13 +165,17 @@ impl Scylla {
         }
         // We need this clone, to safely share the session between threads.
         let session_arc = self.scylla_session.clone();
+        let consistency = consistency.map(ScyllaConsistency::from);
         anyhow_py_future(py, async move {
             let session_guard = session_arc.read().await;
             let session = session_guard
                 .as_ref()
                 .ok_or(anyhow::anyhow!("Session is not initialized."))?;
             // We construct query, using passed query string.
-            let cql_query = Query::new(query);
+            let mut cql_query = Query::new(query);
+            if let Some(consistency) = consistency {
+                cql_query.set_consistency(consistency);
+            }
             let res = session.query(cql_query, query_params).await?;
             log::debug!("Query executed!");
             // Column specs is a class that holds information
@@ -187,23 +199,27 @@ impl Scylla {
                         }
                         dumped_rows.push(map);
                     }
+                    let py_rows = dumped_rows.to_object(py);
                     // If user wants to use custom DTO for rows,
                     // we use call it for every row.
                     if let Some(parser) = as_class {
                         let mut result = Vec::new();
-                        for row in dumped_rows {
+                        let py_rows_list = py_rows.downcast::<PyList>(py).map_err(|_| {
+                            anyhow::anyhow!("Cannot parse returned results as list.")
+                        })?;
+                        for row in py_rows_list {
                             result.push(parser.call(
                                 py,
                                 (),
                                 // Here we pass returned fields as kwargs.
-                                Some(row.to_object(py).downcast::<PyDict>(py).map_err(|_| {
+                                Some(row.downcast::<PyDict>().map_err(|_| {
                                     anyhow::anyhow!("Cannot prepare data for calling function")
                                 })?),
                             )?);
                         }
                         return Ok(Some(result.to_object(py)));
                     }
-                    Ok(Some(dumped_rows.to_object(py)))
+                    Ok(Some(py_rows))
                 })
             } else {
                 Ok(None)
