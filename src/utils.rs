@@ -9,7 +9,7 @@ use scylla::{
     frame::response::result::ColumnType,
 };
 
-pub fn anyhow_py_future<F, T>(py: Python, fut: F) -> anyhow::Result<&PyAny>
+pub fn anyhow_py_future<F, T>(py: Python<'_>, fut: F) -> anyhow::Result<&PyAny>
 where
     F: Future<Output = anyhow::Result<T>> + Send + 'static,
     T: IntoPy<PyObject>,
@@ -55,10 +55,10 @@ pub fn cql_to_py<'a>(
     cql_type: &'a ColumnType,
     cql_value: Option<CqlValue>,
 ) -> anyhow::Result<&'a PyAny> {
-    if cql_value.is_none() {
+    let Some(unwrapped_value) = cql_value else{
         return Ok(py.None().into_ref(py));
-    }
-    let unwrapped_value = cql_value.unwrap();
+    };
+
     match cql_type {
         ColumnType::Ascii => unwrapped_value
             .as_ascii()

@@ -1,12 +1,12 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use openssl::{
     ssl::{SslContextBuilder, SslMethod, SslVerifyMode},
     x509::X509,
 };
 use pyo3::{
-    exceptions::PyValueError, pyclass, pymethods, types::PyDict, PyAny, PyErr, PyObject, PyResult,
-    Python, ToPyObject,
+    exceptions::PyValueError, pyclass, pymethods, types::PyDict, PyAny, PyErr, PyObject, Python,
+    ToPyObject,
 };
 use scylla::query::Query;
 
@@ -19,6 +19,7 @@ pub struct Scylla {
     password: Option<String>,
     keyspace: Option<String>,
     ssl_cert: Option<String>,
+    connection_timeout: Option<u64>,
     scylla_session: Arc<tokio::sync::RwLock<Option<scylla::Session>>>,
 }
 
@@ -26,11 +27,12 @@ pub struct Scylla {
 impl Scylla {
     #[new]
     #[pyo3(signature = (
-        contact_points, 
-        username = None, 
-        password = None, 
-        keyspace = None, 
+        contact_points,
+        username = None,
+        password = None,
+        keyspace = None,
         ssl_cert = None,
+        connection_timeout = None,
     ))]
     pub fn py_new(
         contact_points: Vec<String>,
@@ -38,15 +40,17 @@ impl Scylla {
         password: Option<String>,
         keyspace: Option<String>,
         ssl_cert: Option<String>,
-    ) -> PyResult<Self> {
-        Ok(Scylla {
+        connection_timeout: Option<u64>,
+    ) -> Self {
+        Scylla {
             contact_points,
             username,
             password,
             ssl_cert,
             keyspace,
+            connection_timeout,
             scylla_session: Arc::new(tokio::sync::RwLock::new(None)),
-        })
+        }
     }
 
     pub fn startup<'a>(&'a self, py: Python<'a>) -> anyhow::Result<&'a PyAny> {
@@ -65,15 +69,15 @@ impl Scylla {
         }
         let keyspace = self.keyspace.clone();
         let scylla_session = self.scylla_session.clone();
+        let conn_timeout = self.connection_timeout;
         anyhow_py_future(py, async move {
             if scylla_session.read().await.is_some() {
                 return Err(PyErr::new::<PyValueError, _>("meme").into());
             }
-            let mut session_builder = scylla::SessionBuilder::new().ssl_context(ssl_context);
+            let mut session_builder = scylla::SessionBuilder::new()
+                .ssl_context(ssl_context)
+                .known_nodes(contact_points);
             log::debug!("Adding known contact points.");
-            for known_node in contact_points {
-                session_builder = session_builder.known_node(known_node);
-            }
             match (username, password) {
                 (Some(user), Some(pass)) => session_builder = session_builder.user(user, pass),
                 (None, None) => {}
@@ -86,7 +90,10 @@ impl Scylla {
             if let Some(keyspace) = keyspace {
                 session_builder = session_builder.use_keyspace(keyspace, true);
             }
-
+            if let Some(connection_timeout) = conn_timeout {
+                session_builder =
+                    session_builder.connection_timeout(Duration::from_secs(connection_timeout));
+            }
             let mut session_guard = scylla_session.write().await;
             *session_guard = Some(session_builder.build().await?);
             Ok(())
@@ -124,10 +131,9 @@ impl Scylla {
         let session_arc = self.scylla_session.clone();
         anyhow_py_future(py, async move {
             let session_guard = session_arc.read().await;
-            if session_guard.is_none() {
-                return Err(PyValueError::new_err("Session is not initialized.").into());
-            }
-            let session = session_guard.as_ref().unwrap();
+            let session = session_guard
+                .as_ref()
+                .ok_or(anyhow::anyhow!("Session is not initialized."))?;
             let cql_query = Query::new(query);
             let res = session.query(cql_query, query_params).await?;
             log::debug!("Query executed!");
