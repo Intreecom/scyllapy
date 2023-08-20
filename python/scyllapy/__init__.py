@@ -1,3 +1,6 @@
 from ._internal import Scylla
+from importlib.metadata import version
 
-__all__ = ['Scylla']
+__version__ = version("scyllapy")
+
+__all__ = ["Scylla", "__version__"]
