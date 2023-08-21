@@ -35,6 +35,7 @@ jobs:
               ssl_cmd: echo "Already installed"
     runs-on: ${{matrix.job.os}}
     steps:
+    - uses: actions/checkout@v1
     - uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
