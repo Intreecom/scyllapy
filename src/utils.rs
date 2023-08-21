@@ -1,13 +1,15 @@
-use std::future::Future;
+use std::{future::Future, str::FromStr};
 
 use pyo3::{
     types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PySet, PyString, PyTuple},
     IntoPy, Py, PyAny, PyObject, Python, ToPyObject,
 };
 use scylla::{
-    _macro_internal::{CqlValue, Value},
+    _macro_internal::{CqlValue, SerializedValues, Value},
     frame::response::result::ColumnType,
 };
+
+use std::net::IpAddr;
 
 /// Small function to integrate anyhow result
 /// and `pyo3_asyncio`.
@@ -38,9 +40,9 @@ where
 /// # Errors
 /// It can raise an error if type cannot be extracted,
 /// or if type is unsupported.
-pub fn py_to_cql_value(item: &PyAny) -> anyhow::Result<Box<dyn Value + Send + Sync>> {
+fn py_to_cql_value(item: &PyAny) -> anyhow::Result<Box<dyn Value + Send + Sync>> {
     if item.is_instance_of::<PyString>() {
-        return Ok(Box::new(item.extract::<String>()?));
+        Ok(Box::new(item.extract::<String>()?))
     } else if item.is_instance_of::<PyList>()
         || item.is_exact_instance_of::<PyTuple>()
         || item.is_exact_instance_of::<PySet>()
@@ -49,23 +51,110 @@ pub fn py_to_cql_value(item: &PyAny) -> anyhow::Result<Box<dyn Value + Send + Sy
         for inner in item.iter()? {
             items.push(py_to_cql_value(inner?)?);
         }
-        return Ok(Box::new(items));
+        Ok(Box::new(items))
     } else if item.is_instance_of::<PyInt>() {
-        return Ok(Box::new(item.extract::<i64>()?));
+        Ok(Box::new(item.extract::<i64>()?))
     } else if item.is_instance_of::<PyBool>() {
-        return Ok(Box::new(item.extract::<bool>()?));
+        Ok(Box::new(item.extract::<bool>()?))
     } else if item.is_instance_of::<PyFloat>() {
-        return Ok(Box::new(item.extract::<f64>()?));
+        Ok(Box::new(item.extract::<f64>()?))
     } else if item.is_instance_of::<PyBytes>() {
-        return Ok(Box::new(item.extract::<Vec<u8>>()?));
+        Ok(Box::new(item.extract::<Vec<u8>>()?))
+    } else if item.get_type().name()? == "IPv4Address" || item.get_type().name()? == "IPv6Address" {
+        Ok(Box::new(IpAddr::from_str(item.str()?.extract::<&str>()?)?))
     } else if item.get_type().name()? == "UUID" {
-        return Ok(Box::new(uuid::Uuid::parse_str(
+        Ok(Box::new(uuid::Uuid::parse_str(
             item.str()?.extract::<&str>()?,
-        )?));
+        )?))
+    } else {
+        let name = item.get_type();
+        Err(anyhow::anyhow!(
+            "Unsupported type for parameter binding: {name}"
+        ))
     }
-    let name = item.get_type();
+}
+
+/// Convert Python type to CQL parameter value.
+///
+/// This function takes a mutable `value_list`,
+/// because it's going to put all converted
+/// values here.
+///
+/// # Errors
+///
+/// May raise an error, if
+/// value cannot be converted or type is unsupported for binding.
+pub fn py_to_value(
+    item: &PyAny,
+    name: Option<&str>,
+    value_list: &mut SerializedValues,
+) -> anyhow::Result<()> {
+    if item.is_instance_of::<PyString>() {
+        let val = item.extract::<String>()?;
+        if let Some(name) = name {
+            value_list.add_named_value(name, &val)?;
+        } else {
+            value_list.add_value(&val)?;
+        }
+    } else if item.is_instance_of::<PyInt>() {
+        let val = item.extract::<i64>()?;
+        if let Some(name) = name {
+            value_list.add_named_value(name, &val)?;
+        } else {
+            value_list.add_value(&val)?;
+        }
+    } else if item.is_instance_of::<PyBool>() {
+        let val = item.extract::<bool>()?;
+        if let Some(name) = name {
+            value_list.add_named_value(name, &val)?;
+        } else {
+            value_list.add_value(&val)?;
+        }
+    } else if item.is_instance_of::<PyFloat>() {
+        let val = item.extract::<f64>()?;
+        if let Some(name) = name {
+            value_list.add_named_value(name, &val)?;
+        } else {
+            value_list.add_value(&val)?;
+        }
+    } else if item.is_instance_of::<PyBytes>() {
+        let val = item.extract::<Vec<u8>>()?;
+        if let Some(name) = name {
+            value_list.add_named_value(name, &val)?;
+        } else {
+            value_list.add_value(&val)?;
+        }
+    } else if item.get_type().name()? == "UUID" {
+        let val = uuid::Uuid::parse_str(item.str()?.extract::<&str>()?)?;
+        if let Some(name) = name {
+            value_list.add_named_value(name, &val)?;
+        } else {
+            value_list.add_value(&val)?;
+        }
+    } else if item.get_type().name()? == "IPv4Address" || item.get_type().name()? == "IPv6Address" {
+        let val = IpAddr::from_str(item.str()?.extract::<&str>()?)?;
+        if let Some(name) = name {
+            value_list.add_named_value(name, &val)?;
+        } else {
+            value_list.add_value(&val)?;
+        }
+    } else if item.is_instance_of::<PyList>()
+        || item.is_exact_instance_of::<PyTuple>()
+        || item.is_exact_instance_of::<PySet>()
+    {
+        let mut items = Vec::new();
+        for inner in item.iter()? {
+            items.push(py_to_cql_value(inner?)?);
+        }
+        if let Some(name) = name {
+            value_list.add_named_value(name, &items)?;
+        } else {
+            value_list.add_value(&items)?;
+        }
+    }
+    let type_name = item.get_type().name()?;
     Err(anyhow::anyhow!(
-        "Unsupported type for parameter binding: {name}"
+        "Unsupported type for parameter binding: {type_name:?}"
     ))
 }
 
@@ -93,7 +182,6 @@ pub fn cql_to_py<'a>(
     let Some(unwrapped_value) = cql_value else{
         return Ok(py.None().into_ref(py));
     };
-
     match cql_type {
         ColumnType::Ascii => unwrapped_value
             .as_ascii()
@@ -181,16 +269,71 @@ pub fn cql_to_py<'a>(
                 .to_string();
             Ok(py.import("uuid")?.getattr("UUID")?.call1((uuid_str,))?)
         }
-        ColumnType::Custom(_) => Err(anyhow::anyhow!("Custom types are not yet supported.")),
-        ColumnType::Counter => Err(anyhow::anyhow!("Counter is not yet supported.")),
-        ColumnType::Varint => Err(anyhow::anyhow!("Variant is not yet supported.")),
+        ColumnType::Timeuuid => {
+            let uuid_str = unwrapped_value
+                .as_timeuuid()
+                .ok_or(anyhow::anyhow!("Cannot parse timeuuid"))?
+                .as_simple()
+                .to_string();
+            Ok(py.import("uuid")?.getattr("UUID")?.call1((uuid_str,))?)
+        }
+        ColumnType::Duration => {
+            // We loose some perscision on converting it to
+            // python datetime, because in scylla,
+            // durations is stored in nanoseconds.
+            // But that's ok, because we assume that
+            // all values were inserted using
+            // same driver. Will fix it on demand.
+            let duration = unwrapped_value
+                .as_duration()
+                .ok_or(anyhow::anyhow!("Cannot parse duration"))?;
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("microseconds", duration.num_microseconds())?;
+            Ok(py
+                .import("datetime")?
+                .getattr("timedelta")?
+                .call((), Some(kwargs))?)
+        }
+        ColumnType::Timestamp => {
+            // Timestamp - num of milliseconds since unix epoch.
+            Ok(unwrapped_value
+                .as_duration()
+                .ok_or(anyhow::anyhow!("Cannot parse timestamp"))?
+                .num_milliseconds()
+                .to_object(py)
+                .into_ref(py))
+        }
+        ColumnType::Inet => Ok(unwrapped_value
+            .as_inet()
+            .ok_or(anyhow::anyhow!("Cannot parse inet addres"))?
+            .to_object(py)
+            .into_ref(py)),
+        ColumnType::Date => {
+            let formatted_date = unwrapped_value
+                .as_date()
+                .ok_or(anyhow::anyhow!("Cannot parse date"))?
+                .format("%Y-%m-%d")
+                .to_string();
+            Ok(py
+                .import("datetime")?
+                .getattr("date")?
+                .call_method1("fromisoformat", (formatted_date,))?)
+        }
+        ColumnType::Tuple(types) => {
+            if let CqlValue::Tuple(data) = unwrapped_value {
+                let mut dumped_elemets = Vec::new();
+                for (col_type, col_val) in types.iter().zip(data) {
+                    dumped_elemets.push(cql_to_py(py, col_type, col_val.as_ref())?);
+                }
+                Ok(PyTuple::new(py, dumped_elemets))
+            } else {
+                Err(anyhow::anyhow!("Cannot parse as tuple."))
+            }
+        }
         ColumnType::Time => Err(anyhow::anyhow!("Time is not yet supported.")),
-        ColumnType::Timestamp => Err(anyhow::anyhow!("Timestamp is not yet supported.")),
-        ColumnType::Inet => Err(anyhow::anyhow!("Inet is not yet supported.")),
-        ColumnType::Date => Err(anyhow::anyhow!("Date is not yet supported.")),
-        ColumnType::Duration => Err(anyhow::anyhow!("Duration is not yet supported.")),
-        ColumnType::Timeuuid => Err(anyhow::anyhow!("TimeUUID is not yet supported.")),
-        ColumnType::Tuple(_) => Err(anyhow::anyhow!("Tuple is not yet supported.")),
+        ColumnType::Counter => Err(anyhow::anyhow!("Counter is not yet supported.")),
+        ColumnType::Custom(_) => Err(anyhow::anyhow!("Custom types are not yet supported.")),
+        ColumnType::Varint => Err(anyhow::anyhow!("Variant is not yet supported.")),
         ColumnType::Decimal => Err(anyhow::anyhow!("Decimals are not yet supported.")),
         ColumnType::UserDefinedType {
             type_name: _,
