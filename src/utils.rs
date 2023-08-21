@@ -11,6 +11,8 @@ use scylla::{
 
 use std::net::IpAddr;
 
+use crate::extra_types::{BigInt, Double, SmallInt, TinyInt};
+
 /// Small function to integrate anyhow result
 /// and `pyo3_asyncio`.
 ///
@@ -36,6 +38,7 @@ pub enum PyToValue {
     BigInt(i64),
     Int(i32),
     SmallInt(i16),
+    TinyInt(i8),
     Bool(bool),
     Double(f64),
     Float(f32),
@@ -59,6 +62,7 @@ impl Value for PyToValue {
             PyToValue::Uuid(u) => u.serialize(buf),
             PyToValue::Inet(i) => i.serialize(buf),
             PyToValue::List(l) => l.serialize(buf),
+            PyToValue::TinyInt(t) => t.serialize(buf),
         }
     }
 }
@@ -81,7 +85,15 @@ pub fn py_to_value(item: &PyAny) -> anyhow::Result<PyToValue> {
     } else if item.is_instance_of::<PyBool>() {
         Ok(PyToValue::Bool(item.extract::<bool>()?))
     } else if item.is_instance_of::<PyFloat>() {
-        Ok(PyToValue::Double(item.extract::<f64>()?))
+        Ok(PyToValue::Float(item.extract::<f32>()?))
+    } else if item.is_instance_of::<SmallInt>() {
+        Ok(PyToValue::SmallInt(item.extract::<SmallInt>()?.get_value()))
+    } else if item.is_instance_of::<TinyInt>() {
+        Ok(PyToValue::TinyInt(item.extract::<TinyInt>()?.get_value()))
+    } else if item.is_instance_of::<BigInt>() {
+        Ok(PyToValue::BigInt(item.extract::<BigInt>()?.get_value()))
+    } else if item.is_instance_of::<Double>() {
+        Ok(PyToValue::Double(item.extract::<Double>()?.get_value()))
     } else if item.is_instance_of::<PyBytes>() {
         Ok(PyToValue::Bytes(item.extract::<Vec<u8>>()?))
     } else if item.get_type().name()? == "UUID" {

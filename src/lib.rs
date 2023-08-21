@@ -1,5 +1,6 @@
 pub mod batches;
 pub mod consistencies;
+pub mod extra_types;
 pub mod inputs;
 pub mod prepared_queries;
 pub mod queries;
@@ -11,7 +12,7 @@ use pyo3::{pymodule, types::PyModule, PyResult, Python};
 
 #[pymodule]
 #[pyo3(name = "_internal")]
-fn _internal(_py: Python<'_>, pymod: &PyModule) -> PyResult<()> {
+fn _internal(py: Python<'_>, pymod: &PyModule) -> PyResult<()> {
     pyo3_log::init();
     pymod.add_class::<scylla_cls::Scylla>()?;
     pymod.add_class::<consistencies::ScyllaPyConsistency>()?;
@@ -21,5 +22,6 @@ fn _internal(_py: Python<'_>, pymod: &PyModule) -> PyResult<()> {
     pymod.add_class::<batches::ScyllaPyBatch>()?;
     pymod.add_class::<batches::ScyllaPyBatchType>()?;
     pymod.add_class::<query_results::ScyllaPyQueryResult>()?;
+    pymod.add_submodule(extra_types::add_module(py, "extra_types")?)?;
     Ok(())
 }
