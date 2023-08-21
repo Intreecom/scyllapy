@@ -157,7 +157,7 @@ impl Scylla {
         // to corresponding CQL values.
         if let Some(passed_params) = params {
             for param in passed_params {
-                py_to_value(param, None, &mut query_params)?;
+                query_params.add_value(&py_to_value(param)?)?;
             }
         }
         // We need this clone, to safely share the session between threads.
@@ -199,7 +199,7 @@ impl Scylla {
             for query_params in passed_params {
                 let mut query_serialized = SerializedValues::new();
                 for param in query_params.iter()? {
-                    py_to_value(param?, None, &mut query_serialized)?;
+                    query_serialized.add_value(&py_to_value(param?)?)?;
                 }
                 batch_params.push(query_serialized);
             }

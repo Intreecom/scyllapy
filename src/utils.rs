@@ -5,7 +5,7 @@ use pyo3::{
     IntoPy, Py, PyAny, PyObject, Python, ToPyObject,
 };
 use scylla::{
-    _macro_internal::{CqlValue, SerializedValues, Value},
+    _macro_internal::{CqlValue, Value},
     frame::response::result::ColumnType,
 };
 
@@ -31,131 +31,82 @@ where
     Ok(res)
 }
 
-/// Convert python type to CQL value.
-///
-/// This function is used to convert parameters, passed from
-/// python to convinient `CQLValue` type. All these values are
-/// going to be used in parameter bindings for query.
-///
-/// # Errors
-/// It can raise an error if type cannot be extracted,
-/// or if type is unsupported.
-fn py_to_cql_value(item: &PyAny) -> anyhow::Result<Box<dyn Value + Send + Sync>> {
-    if item.is_instance_of::<PyString>() {
-        Ok(Box::new(item.extract::<String>()?))
-    } else if item.is_instance_of::<PyList>()
-        || item.is_exact_instance_of::<PyTuple>()
-        || item.is_exact_instance_of::<PySet>()
-    {
-        let mut items = Vec::new();
-        for inner in item.iter()? {
-            items.push(py_to_cql_value(inner?)?);
+pub enum PyToValue {
+    String(String),
+    BigInt(i64),
+    Int(i32),
+    SmallInt(i16),
+    Bool(bool),
+    Double(f64),
+    Float(f32),
+    Bytes(Vec<u8>),
+    Uuid(uuid::Uuid),
+    Inet(IpAddr),
+    List(Vec<PyToValue>),
+}
+
+impl Value for PyToValue {
+    fn serialize(&self, buf: &mut Vec<u8>) -> Result<(), scylla::_macro_internal::ValueTooBig> {
+        match self {
+            PyToValue::String(s) => s.serialize(buf),
+            PyToValue::BigInt(i) => i.serialize(buf),
+            PyToValue::Int(i) => i.serialize(buf),
+            PyToValue::SmallInt(i) => i.serialize(buf),
+            PyToValue::Bool(b) => b.serialize(buf),
+            PyToValue::Double(d) => d.serialize(buf),
+            PyToValue::Float(f) => f.serialize(buf),
+            PyToValue::Bytes(b) => b.serialize(buf),
+            PyToValue::Uuid(u) => u.serialize(buf),
+            PyToValue::Inet(i) => i.serialize(buf),
+            PyToValue::List(l) => l.serialize(buf),
         }
-        Ok(Box::new(items))
-    } else if item.is_instance_of::<PyInt>() {
-        Ok(Box::new(item.extract::<i64>()?))
-    } else if item.is_instance_of::<PyBool>() {
-        Ok(Box::new(item.extract::<bool>()?))
-    } else if item.is_instance_of::<PyFloat>() {
-        Ok(Box::new(item.extract::<f64>()?))
-    } else if item.is_instance_of::<PyBytes>() {
-        Ok(Box::new(item.extract::<Vec<u8>>()?))
-    } else if item.get_type().name()? == "IPv4Address" || item.get_type().name()? == "IPv6Address" {
-        Ok(Box::new(IpAddr::from_str(item.str()?.extract::<&str>()?)?))
-    } else if item.get_type().name()? == "UUID" {
-        Ok(Box::new(uuid::Uuid::parse_str(
-            item.str()?.extract::<&str>()?,
-        )?))
-    } else {
-        let name = item.get_type();
-        Err(anyhow::anyhow!(
-            "Unsupported type for parameter binding: {name}"
-        ))
     }
 }
 
 /// Convert Python type to CQL parameter value.
 ///
-/// This function takes a mutable `value_list`,
-/// because it's going to put all converted
-/// values here.
+/// It converts python object to another type,
+/// which can be serialized as Value that can
+/// be bound to `Query`.
 ///
 /// # Errors
 ///
 /// May raise an error, if
-/// value cannot be converted or type is unsupported for binding.
-pub fn py_to_value(
-    item: &PyAny,
-    name: Option<&str>,
-    value_list: &mut SerializedValues,
-) -> anyhow::Result<()> {
+/// value cannot be converted or unnown type was passed.
+pub fn py_to_value(item: &PyAny) -> anyhow::Result<PyToValue> {
     if item.is_instance_of::<PyString>() {
-        let val = item.extract::<String>()?;
-        if let Some(name) = name {
-            value_list.add_named_value(name, &val)?;
-        } else {
-            value_list.add_value(&val)?;
-        }
+        Ok(PyToValue::String(item.extract::<String>()?))
     } else if item.is_instance_of::<PyInt>() {
-        let val = item.extract::<i64>()?;
-        if let Some(name) = name {
-            value_list.add_named_value(name, &val)?;
-        } else {
-            value_list.add_value(&val)?;
-        }
+        Ok(PyToValue::BigInt(item.extract::<i64>()?))
     } else if item.is_instance_of::<PyBool>() {
-        let val = item.extract::<bool>()?;
-        if let Some(name) = name {
-            value_list.add_named_value(name, &val)?;
-        } else {
-            value_list.add_value(&val)?;
-        }
+        Ok(PyToValue::Bool(item.extract::<bool>()?))
     } else if item.is_instance_of::<PyFloat>() {
-        let val = item.extract::<f64>()?;
-        if let Some(name) = name {
-            value_list.add_named_value(name, &val)?;
-        } else {
-            value_list.add_value(&val)?;
-        }
+        Ok(PyToValue::Double(item.extract::<f64>()?))
     } else if item.is_instance_of::<PyBytes>() {
-        let val = item.extract::<Vec<u8>>()?;
-        if let Some(name) = name {
-            value_list.add_named_value(name, &val)?;
-        } else {
-            value_list.add_value(&val)?;
-        }
+        Ok(PyToValue::Bytes(item.extract::<Vec<u8>>()?))
     } else if item.get_type().name()? == "UUID" {
-        let val = uuid::Uuid::parse_str(item.str()?.extract::<&str>()?)?;
-        if let Some(name) = name {
-            value_list.add_named_value(name, &val)?;
-        } else {
-            value_list.add_value(&val)?;
-        }
+        Ok(PyToValue::Uuid(uuid::Uuid::parse_str(
+            item.str()?.extract::<&str>()?,
+        )?))
     } else if item.get_type().name()? == "IPv4Address" || item.get_type().name()? == "IPv6Address" {
-        let val = IpAddr::from_str(item.str()?.extract::<&str>()?)?;
-        if let Some(name) = name {
-            value_list.add_named_value(name, &val)?;
-        } else {
-            value_list.add_value(&val)?;
-        }
+        Ok(PyToValue::Inet(IpAddr::from_str(
+            item.str()?.extract::<&str>()?,
+        )?))
     } else if item.is_instance_of::<PyList>()
         || item.is_exact_instance_of::<PyTuple>()
         || item.is_exact_instance_of::<PySet>()
     {
         let mut items = Vec::new();
         for inner in item.iter()? {
-            items.push(py_to_cql_value(inner?)?);
+            items.push(py_to_value(inner?)?);
         }
-        if let Some(name) = name {
-            value_list.add_named_value(name, &items)?;
-        } else {
-            value_list.add_value(&items)?;
-        }
+        Ok(PyToValue::List(items))
+    } else {
+        let type_name = item.get_type().name()?;
+        Err(anyhow::anyhow!(
+            "Unsupported type for parameter binding: {type_name:?}"
+        ))
     }
-    let type_name = item.get_type().name()?;
-    Err(anyhow::anyhow!(
-        "Unsupported type for parameter binding: {type_name:?}"
-    ))
 }
 
 /// Convert CQL type from database to Python.
