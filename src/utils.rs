@@ -1,12 +1,13 @@
-use std::future::Future;
+use std::{collections::HashMap, future::Future};
 
 use pyo3::{
     types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PySet, PyString, PyTuple},
-    IntoPy, PyAny, PyObject, Python, ToPyObject,
+    IntoPy, Py, PyAny, PyObject, Python, ToPyObject,
 };
 use scylla::{
     _macro_internal::{CqlValue, Value},
     frame::response::result::ColumnType,
+    QueryResult,
 };
 
 /// Small function to integrate anyhow result
@@ -38,7 +39,7 @@ where
 /// # Errors
 /// It can raise an error if type cannot be extracted,
 /// or if type is unsupported.
-pub fn py_to_cql_value(item: &PyAny) -> anyhow::Result<Box<dyn Value + Send>> {
+pub fn py_to_cql_value(item: &PyAny) -> anyhow::Result<Box<dyn Value + Send + Sync>> {
     if item.is_instance_of::<PyString>() {
         return Ok(Box::new(item.extract::<String>()?));
     } else if item.is_instance_of::<PyList>()
@@ -197,5 +198,66 @@ pub fn cql_to_py<'a>(
             keyspace: _,
             field_types: _,
         } => Err(anyhow::anyhow!("UDT is not yet supported.")),
+    }
+}
+
+/// Convert `QueryResult` to some Python-native object.
+///
+/// the `as_class` parameter is supplied by users.
+/// It should be a callable python object, that returns
+/// some DTO. It's called with key-word only arguments.
+///
+/// # Errors
+///
+/// Can result in an error in two main cases.
+/// * Resulting rows cannot be parsed as list.
+/// * Dict that used as kwargs cannot be downcasted as dict.
+pub fn convert_db_response(
+    res: QueryResult,
+    as_class: Option<PyObject>,
+) -> anyhow::Result<Option<Py<PyAny>>> {
+    let specs = res.col_specs.clone();
+    if let Ok(rows) = res.rows() {
+        // We need to enable GIL here,
+        // because we're going to create references
+        // in Python's heap memory, so everything
+        // returned by the query may be accessed from python.
+        Python::with_gil(|py| {
+            let mut dumped_rows = Vec::new();
+            for row in rows {
+                let mut map = HashMap::new();
+                for (index, col) in row.columns.into_iter().enumerate() {
+                    map.insert(
+                        specs[index].name.as_str(),
+                        // Here we convert returned row to python-native type.
+                        cql_to_py(py, &specs[index].typ, col)?,
+                    );
+                }
+                dumped_rows.push(map);
+            }
+            let py_rows = dumped_rows.to_object(py);
+            // If user wants to use custom DTO for rows,
+            // we use call it for every row.
+            if let Some(parser) = as_class {
+                let mut result = Vec::new();
+                let py_rows_list = py_rows
+                    .downcast::<PyList>(py)
+                    .map_err(|_| anyhow::anyhow!("Cannot parse returned results as list."))?;
+                for row in py_rows_list {
+                    result.push(parser.call(
+                        py,
+                        (),
+                        // Here we pass returned fields as kwargs.
+                        Some(row.downcast::<PyDict>().map_err(|_| {
+                            anyhow::anyhow!("Cannot prepare data for calling function")
+                        })?),
+                    )?);
+                }
+                return Ok(Some(result.to_object(py)));
+            }
+            Ok(Some(py_rows))
+        })
+    } else {
+        Ok(None)
     }
 }
