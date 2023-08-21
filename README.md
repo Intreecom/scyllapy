@@ -1,55 +1,169 @@
 # Scylla driver for python
 
-Simple to use driver for scyllaDB written in Rust.
-It uses official driver for scyllaDB for Rust internally and
-integrates it in Python.
+Python driver for ScyllaDB written in Rust. Though description says it's for scylla,
+however it can be used with Cassandra and AWS keyspaces as well.
 
-```python
-from scyllapy import Scylla
+This driver uses official [ScyllaDB driver](https://github.com/scylladb/scylla-rust-driver) for [Rust](https://github.com/rust-lang/rust/) and exposes python API to interact with it.
 
-async def main():
-    scylla = Scylla(["172.18.0.5:9042"], username="user", password="pass", keyspace="keyspace")
-    await scylla.startup()
-    result = await scylla.execute("SELECT * FROM table")
+## Installation
+
+To install it, use your favorite package manager for python packages:
+
+```bash
+pip install scyllapy
 ```
 
-You can use parameters in queries.
+Also, you can build from sources. To do it, install stable rust, [maturin](https://github.com/PyO3/maturin) and openssl libs.
 
-```python
-    await scylla.execute("SELECT * FROM table WHERE id IN ? AND name = ?", ([1, 2, 3], "name"))
+```bash
+maturin build --release --out dist
+# Then install whl file from dist folder.
+pip install dist/*
 ```
 
-You can set row type, by passing as_class.
+## Usage
+
+The usage is pretty straitforward. Create a Scylla instance, run startup and start executing queries.
 
 ```python
 import asyncio
-from dataclasses import dataclass
-import uuid
 
 from scyllapy import Scylla
 
 
-@dataclass
-class InboxDTO:
-    user_id: uuid.UUID
-    chat_id: uuid.UUID
-
-
 async def main():
-    scylla = Scylla(["172.18.0.5:9042"], keyspace="chat_api")
+    scylla = Scylla(["localhost:9042"], keyspace="keyspace")
     await scylla.startup()
-    results = await scylla.execute("SELECT * FROM inbox")
-    print(results.all(as_class=InboxDTO))
+    await scylla.execute("SELECT * FROM table")
     await scylla.shutdown()
-
 
 if __name__ == "__main__":
     asyncio.run(main())
 
 ```
 
-It will print:
+## Parametrizing queries
 
-```log
-[InboxDTO(user_id=UUID('cbec7f6f-a1d3-45be-b1c1-08187ac6b188'), chat_id=UUID('72b14d17-eab3-4c12-bd97-3e80b8ab35c3'))]
+While executing queries sometimes you may want to fine-tune some parameters, or dynamically pass values to the query.
+
+Passing parameters is simple. You need to add a paramters list to the query.
+
+```python
+    await scylla.execute(
+        "INSERT INTO otps(id, otp) VALUES (?, ?)",
+        [uuid.uuid4(), uuid.uuid4().hex],
+    )
+```
+
+Queries can be modified further by using `Query` class. It allows you to define
+consistency for query or enable tracing.
+
+```python
+from scyllapy import Scylla, Query, Consistency, SerialConsistency
+
+async def make_query(scylla: Scylla) -> None:
+    query = Query(
+        "SELECT * FROM table",
+        consistency=Consistency.ALL,
+        serial_consistency=SerialConsistency.LOCAL_SERIAL,
+        request_timeout=1,
+        timestamp=int(time.time()),
+        is_idempotent=False,
+        tracing=True,
+    )
+    result = await scylla.execute(query)
+    print(result.all())
+```
+
+Also, with queries you can tweak random parameters for a specific execution.
+
+```python
+query = Query("SELECT * FROM table")
+
+new_query = query.with_consistency(Consistency.ALL)
+```
+
+All `with_` methods create new query, copying all other parameters.
+
+## Preparing queries
+
+Also, queries can be prepared. You can either prepare raw strings, or `Query` objects.
+
+```python
+from scyllapy import Scylla, Query, PreparedQuery
+
+
+async def prepare(scylla: Scylla, query: str | Query) -> PreparedQuery:
+    return await scylla.prepare(query)
+```
+
+You can execute prepared queries by passing them to `execute` method.
+
+```python
+async def run_prepared(scylla: Scylla) -> None:
+    prepared = await scylla.prepare("INSERT INTO memse(title) VALUES (?)")
+    await scylla.execute(prepared, ("American joke",))
+```
+
+### Batching
+
+We support batches. Batching can help a lot when you have lots of queries that you want to execute at the same time.
+
+```python
+from scyllapy import Scylla, Batch
+
+
+async def run_batch(scylla: Scylla, num_queries: int) -> None:
+    batch = Batch()
+    for _ in range(num_queries):
+        batch.add_query("SELECT * FROM table WHERE id = ?")
+    await scylla.batch(batch, [(i,) for i in range(num_queries)])
+```
+
+Here we pass strings. But you can also add Prepared statements to batches.
+
+### Results
+
+Every query returns a class that represents returned rows. It allows you to not fetch
+and parse actual data if you don't need it. **Please be aware** that if your query was
+not expecting any rows in return. Like for `Update` or `Insert` queries. The `RuntimeError` is raised when you call `all` or `first`.
+
+```python
+result = await scylla.execute("SELECT * FROM table")
+print(result.all())
+```
+
+If you were executing query with tracing, you can get tracing id from results.
+
+```python
+result = await scylla.execute(Query("SELECT * FROM table", tracing=True))
+print(result.trace_id)
+```
+
+Also it's possible to parse your data using custom classes. You
+can use dataclasses or Pydantic.
+
+```python
+from dataclasses import dataclass
+
+@dataclass
+class MyDTO:
+    id: uuid.UUID
+    name: str
+
+result = await scylla.execute("SELECT * FROM inbox")
+print(result.all(as_class=MyDTO))
+```
+
+Or with pydantic.
+
+```python
+from pydantic import BaseModel
+
+class MyDTO(BaseModel):
+    user_id: uuid.UUID
+    chat_id: uuid.UUID
+
+result = await scylla.execute("SELECT * FROM inbox")
+print(result.all(as_class=MyDTO))
 ```
