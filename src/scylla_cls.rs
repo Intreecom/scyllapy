@@ -5,14 +5,14 @@ use openssl::{
     x509::X509,
 };
 use pyo3::{pyclass, pymethods, PyAny, Python};
-use scylla::{batch::Batch, query::Query};
+use scylla::{_macro_internal::SerializedValues, batch::Batch, query::Query};
 
 use crate::{
     batches::ScyllaPyBatch,
     inputs::{ExecuteInput, PrepareInput},
     prepared_queries::ScyllaPyPreparedQuery,
     query_results::ScyllaPyQueryResult,
-    utils::{anyhow_py_future, py_to_cql_value},
+    utils::{anyhow_py_future, py_to_value},
 };
 
 #[pyclass(frozen, weakref)]
@@ -152,14 +152,13 @@ impl Scylla {
     ) -> anyhow::Result<&'a PyAny> {
         // We need to prepare parameter we're going to use
         // in query.
-        let mut query_params = Vec::new();
+        let mut query_params = SerializedValues::new();
         // If parameters were passed, we parse python values,
         // to corresponding CQL values.
         if let Some(passed_params) = params {
-            query_params = passed_params
-                .iter()
-                .map(|item| py_to_cql_value(item))
-                .collect::<anyhow::Result<Vec<_>>>()?;
+            for param in passed_params {
+                query_params.add_value(&py_to_value(param)?)?;
+            }
         }
         // We need this clone, to safely share the session between threads.
         let session_arc = self.scylla_session.clone();
@@ -197,13 +196,12 @@ impl Scylla {
         // If parameters were passed, we parse python values,
         // to corresponding CQL values.
         if let Some(passed_params) = params {
-            for param_list in passed_params {
-                batch_params.push(
-                    param_list
-                        .iter()?
-                        .map(|item| py_to_cql_value(item?))
-                        .collect::<anyhow::Result<Vec<_>>>()?,
-                );
+            for query_params in passed_params {
+                let mut query_serialized = SerializedValues::new();
+                for param in query_params.iter()? {
+                    query_serialized.add_value(&py_to_value(param?)?)?;
+                }
+                batch_params.push(query_serialized);
             }
         }
         let batch = Batch::from(batch);
