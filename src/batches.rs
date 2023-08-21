@@ -1,27 +1,27 @@
 use pyo3::{pyclass, pymethods};
-use scylla::batch::{Batch as ScyllaBatch, BatchType as ScyllaBatchType};
+use scylla::batch::{Batch, BatchType};
 
 use crate::{
-    consistencies::{Consistency, SerialConsistency},
+    consistencies::{ScyllaPyConsistency, ScyllaPySerialConsistency},
     inputs::BatchQueryInput,
 };
 
-#[pyclass]
+#[pyclass(name = "BatchType")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BatchType {
+pub enum ScyllaPyBatchType {
     COUNTER,
     LOGGED,
     UNLOGGED,
 }
 
-#[pyclass]
+#[pyclass(name = "Batch")]
 #[derive(Clone)]
-pub struct Batch {
-    inner: ScyllaBatch,
+pub struct ScyllaPyBatch {
+    inner: Batch,
     #[pyo3(get)]
-    pub consistency: Option<Consistency>,
+    pub consistency: Option<ScyllaPyConsistency>,
     #[pyo3(get)]
-    pub serial_consistency: Option<SerialConsistency>,
+    pub serial_consistency: Option<ScyllaPySerialConsistency>,
     #[pyo3(get)]
     pub request_timeout: Option<u64>,
     #[pyo3(get)]
@@ -32,17 +32,17 @@ pub struct Batch {
     pub tracing: Option<bool>,
 }
 
-impl From<Batch> for ScyllaBatch {
-    fn from(value: Batch) -> Self {
+impl From<ScyllaPyBatch> for Batch {
+    fn from(value: ScyllaPyBatch) -> Self {
         value.inner
     }
 }
 
 #[pymethods]
-impl Batch {
+impl ScyllaPyBatch {
     #[new]
     #[pyo3(signature = (
-        batch_type = BatchType::UNLOGGED,
+        batch_type = ScyllaPyBatchType::UNLOGGED,
         consistency = None,
         serial_consistency = None,
         request_timeout = None,
@@ -53,16 +53,16 @@ impl Batch {
     #[allow(clippy::too_many_arguments)]
     #[must_use]
     pub fn py_new(
-        batch_type: BatchType,
-        consistency: Option<Consistency>,
-        serial_consistency: Option<SerialConsistency>,
+        batch_type: ScyllaPyBatchType,
+        consistency: Option<ScyllaPyConsistency>,
+        serial_consistency: Option<ScyllaPySerialConsistency>,
         request_timeout: Option<u64>,
         timestamp: Option<i64>,
         is_idempotent: Option<bool>,
         tracing: Option<bool>,
     ) -> Self {
         Self {
-            inner: ScyllaBatch::new(batch_type.into()),
+            inner: Batch::new(batch_type.into()),
             consistency,
             serial_consistency,
             request_timeout,
@@ -77,12 +77,12 @@ impl Batch {
     }
 }
 
-impl From<BatchType> for ScyllaBatchType {
-    fn from(value: BatchType) -> Self {
+impl From<ScyllaPyBatchType> for BatchType {
+    fn from(value: ScyllaPyBatchType) -> Self {
         match value {
-            BatchType::COUNTER => Self::Counter,
-            BatchType::LOGGED => Self::Logged,
-            BatchType::UNLOGGED => Self::Unlogged,
+            ScyllaPyBatchType::COUNTER => Self::Counter,
+            ScyllaPyBatchType::LOGGED => Self::Logged,
+            ScyllaPyBatchType::UNLOGGED => Self::Unlogged,
         }
     }
 }

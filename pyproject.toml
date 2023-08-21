@@ -1,5 +1,21 @@
 [project]
 name = "scyllapy"
+description = "Async scylla driver for python"
+requires-python = ">=3.8,<4"
+readme = "README.md"
+keywords = ["Scylla", "Cassandra", "async-driver", "scylla-driver"]
+classifiers = [
+    "Typing :: Typed",
+    "Topic :: Database",
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Rust",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft",
+    "Operating System :: POSIX :: Linux",
+    "Intended Audience :: Developers",
+    "Topic :: Database :: Front-Ends",
+]
+
 
 [tool.maturin]
 python-source = "python"

@@ -1,16 +1,14 @@
 use pyo3::pyclass;
-use scylla::frame::types::{
-    Consistency as ScyllaConsistency, SerialConsistency as ScyllaSerialConsistency,
-};
+use scylla::frame::types::{Consistency, SerialConsistency};
 
 /// Consistency levels for queries.
 ///
 /// This class allows to run queries
 /// with specific consistency levels.
-#[pyclass]
+#[pyclass(name = "Consistency")]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[allow(non_camel_case_types)]
-pub enum Consistency {
+pub enum ScyllaPyConsistency {
     ANY,
     ONE,
     TWO,
@@ -22,39 +20,39 @@ pub enum Consistency {
     LOCAL_ONE,
 }
 
-#[pyclass]
+#[pyclass(name = "SerialConsistency")]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[allow(non_camel_case_types)]
-pub enum SerialConsistency {
+pub enum ScyllaPySerialConsistency {
     SERIAL,
     LOCAL_SERIAL,
 }
 
 /// Here we define how to convert our Consistency,
 /// to the type that is used by scylla library.
-impl From<Consistency> for ScyllaConsistency {
-    fn from(value: Consistency) -> Self {
+impl From<ScyllaPyConsistency> for Consistency {
+    fn from(value: ScyllaPyConsistency) -> Self {
         match value {
-            Consistency::ANY => Self::Any,
-            Consistency::ONE => Self::One,
-            Consistency::TWO => Self::Two,
-            Consistency::THREE => Self::Three,
-            Consistency::QUORUM => Self::Quorum,
-            Consistency::ALL => Self::All,
-            Consistency::LOCAL_QUORUM => Self::LocalQuorum,
-            Consistency::EACH_QUORUM => Self::EachQuorum,
-            Consistency::LOCAL_ONE => Self::LocalOne,
+            ScyllaPyConsistency::ANY => Self::Any,
+            ScyllaPyConsistency::ONE => Self::One,
+            ScyllaPyConsistency::TWO => Self::Two,
+            ScyllaPyConsistency::THREE => Self::Three,
+            ScyllaPyConsistency::QUORUM => Self::Quorum,
+            ScyllaPyConsistency::ALL => Self::All,
+            ScyllaPyConsistency::LOCAL_QUORUM => Self::LocalQuorum,
+            ScyllaPyConsistency::EACH_QUORUM => Self::EachQuorum,
+            ScyllaPyConsistency::LOCAL_ONE => Self::LocalOne,
         }
     }
 }
 
 /// Convertion between python serial consistency
 /// and scylla serial consistency.
-impl From<SerialConsistency> for ScyllaSerialConsistency {
-    fn from(value: SerialConsistency) -> Self {
+impl From<ScyllaPySerialConsistency> for SerialConsistency {
+    fn from(value: ScyllaPySerialConsistency) -> Self {
         match value {
-            SerialConsistency::SERIAL => Self::Serial,
-            SerialConsistency::LOCAL_SERIAL => Self::LocalSerial,
+            ScyllaPySerialConsistency::SERIAL => Self::Serial,
+            ScyllaPySerialConsistency::LOCAL_SERIAL => Self::LocalSerial,
         }
     }
 }

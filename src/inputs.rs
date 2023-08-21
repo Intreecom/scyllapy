@@ -1,16 +1,16 @@
 use pyo3::FromPyObject;
 
-use crate::{prepared_query::PreparedQuery, query::Query};
-use scylla::{batch::BatchStatement, query::Query as ScyllaQuery};
+use crate::{prepared_queries::ScyllaPyPreparedQuery, queries::ScyllaPyQuery};
+use scylla::{batch::BatchStatement, query::Query};
 
 #[derive(Clone, FromPyObject)]
 pub enum ExecuteInput {
     #[pyo3(transparent, annotation = "str")]
     Text(String),
     #[pyo3(transparent, annotation = "Query")]
-    Query(Query),
+    Query(ScyllaPyQuery),
     #[pyo3(transparent, annotation = "PreparedQuery")]
-    PreparedQuery(PreparedQuery),
+    PreparedQuery(ScyllaPyPreparedQuery),
 }
 
 #[derive(Clone, FromPyObject)]
@@ -18,9 +18,9 @@ pub enum BatchQueryInput {
     #[pyo3(transparent, annotation = "str")]
     Text(String),
     #[pyo3(transparent, annotation = "Query")]
-    Query(Query),
+    Query(ScyllaPyQuery),
     #[pyo3(transparent, annotation = "PreparedQuery")]
-    PreparedQuery(PreparedQuery),
+    PreparedQuery(ScyllaPyPreparedQuery),
 }
 
 impl From<BatchQueryInput> for BatchStatement {
@@ -38,10 +38,10 @@ pub enum PrepareInput {
     #[pyo3(transparent, annotation = "str")]
     Text(String),
     #[pyo3(transparent, annotation = "Query")]
-    Query(Query),
+    Query(ScyllaPyQuery),
 }
 
-impl From<PrepareInput> for ScyllaQuery {
+impl From<PrepareInput> for Query {
     fn from(value: PrepareInput) -> Self {
         match value {
             PrepareInput::Text(text) => Self::new(text),

@@ -1,8 +1,8 @@
 pub mod batches;
 pub mod consistencies;
 pub mod inputs;
-pub mod prepared_query;
-pub mod query;
+pub mod prepared_queries;
+pub mod queries;
 pub mod query_results;
 pub mod scylla_cls;
 pub mod utils;
@@ -14,12 +14,12 @@ use pyo3::{pymodule, types::PyModule, PyResult, Python};
 fn _internal(_py: Python<'_>, pymod: &PyModule) -> PyResult<()> {
     pyo3_log::init();
     pymod.add_class::<scylla_cls::Scylla>()?;
-    pymod.add_class::<consistencies::Consistency>()?;
-    pymod.add_class::<consistencies::SerialConsistency>()?;
-    pymod.add_class::<query::Query>()?;
-    pymod.add_class::<prepared_query::PreparedQuery>()?;
-    pymod.add_class::<batches::Batch>()?;
-    pymod.add_class::<batches::BatchType>()?;
+    pymod.add_class::<consistencies::ScyllaPyConsistency>()?;
+    pymod.add_class::<consistencies::ScyllaPySerialConsistency>()?;
+    pymod.add_class::<queries::ScyllaPyQuery>()?;
+    pymod.add_class::<prepared_queries::ScyllaPyPreparedQuery>()?;
+    pymod.add_class::<batches::ScyllaPyBatch>()?;
+    pymod.add_class::<batches::ScyllaPyBatchType>()?;
     pymod.add_class::<query_results::ScyllaPyQueryResult>()?;
     Ok(())
 }
