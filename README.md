@@ -38,8 +38,8 @@ class InboxDTO:
 async def main():
     scylla = Scylla(["172.18.0.5:9042"], keyspace="chat_api")
     await scylla.startup()
-    results = await scylla.execute("SELECT * FROM inbox", as_class=InboxDTO)
-    print(results)
+    results = await scylla.execute("SELECT * FROM inbox")
+    print(results.all(as_class=InboxDTO))
     await scylla.shutdown()
 
 
