@@ -167,3 +167,23 @@ class MyDTO(BaseModel):
 result = await scylla.execute("SELECT * FROM inbox")
 print(result.all(as_class=MyDTO))
 ```
+
+## Extra types
+
+Since Rust enforces typing, it's hard to identify which value
+user tries to pass as a parameter. For example, `1` that comes from python
+can be either `tinyint`, `smallint` or even `bigint`. But we cannot say for sure
+how many bytes should we send to server. That's why we created some extra_types to
+eliminate any possible ambigousnity.
+
+You can find these types in `extra_types` module from scyllapy.
+
+```python
+from scyllapy import Scylla, extra_types
+
+async def execute(scylla: Scylla) -> None:
+    await scylla.execute(
+        "INSERT INTO table(id, name) VALUES (?, ?)",
+        [extra_types.BigInt(1), "memelord"],
+    )
+```
