@@ -109,7 +109,7 @@ pub fn py_to_value(item: &PyAny) -> anyhow::Result<PyToValue> {
         || item.is_exact_instance_of::<PySet>()
     {
         let mut items = Vec::new();
-        for inner in item.iter()? {
+        for inner in item.iter()?.clone() {
             items.push(py_to_value(inner?)?);
         }
         Ok(PyToValue::List(items))
