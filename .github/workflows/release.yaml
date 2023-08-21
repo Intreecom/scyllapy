@@ -1,9 +1,7 @@
-name: CI
+name: Release
 
 on:
   push:
-    tags:
-      - '*'
 
 permissions:
   contents: write
