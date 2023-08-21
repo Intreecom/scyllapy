@@ -3,6 +3,8 @@ name: 'Testing package'
 on:
   pull_request:
 
+permissions:
+  pull-requests: write
 
 jobs:
   clippy:
@@ -14,11 +16,13 @@ jobs:
         toolchain: stable
         components: clippy
         override: true
-    - uses: actions-rs/clippy-check@v1
+    - uses: giraffate/clippy-action@v1
       with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        args: --all-features
+        reporter: 'github-pr-review'
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        clippy_flags: -p scyllapy --all-features -- -W clippy::all -W clippy::pedantic -D warnings
   pytest:
+    name: ${{matrix.job.os}}-${{matrix.py_version}}
     strategy:
       matrix:
         py_version: ["3.8", "3.9", "3.10", "3.11"]
@@ -43,7 +47,7 @@ jobs:
       with:
         python-version: ${{ matrix.py_version }}
     - name: Install tox
-      run: python -m pip install tox-gh>=1.2,<2
+      run: pip install "tox-gh>=1.2,<2"
     - name: Run pytest
       run: tox -v
 
