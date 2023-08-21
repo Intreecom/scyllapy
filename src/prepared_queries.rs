@@ -1,7 +1,7 @@
 use pyo3::pyclass;
 use scylla::prepared_statement::PreparedStatement;
 
-#[pyclass(name = "QueryResult")]
+#[pyclass(name = "PreparedQuery")]
 #[derive(Clone, Debug)]
 pub struct ScyllaPyPreparedQuery {
     inner: PreparedStatement,

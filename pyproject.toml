@@ -4,7 +4,7 @@ description = "Async scylla driver for python"
 requires-python = ">=3.8,<4"
 readme = "README.md"
 license = { file = "LICENSE" }
-keywords = ["Scylla", "Cassandra", "async-driver", "scylla-driver"]
+keywords = ["scylla", "cassandra", "async-driver", "scylla-driver"]
 classifiers = [
     "Typing :: Typed",
     "Topic :: Database",
