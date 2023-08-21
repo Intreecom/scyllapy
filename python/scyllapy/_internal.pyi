@@ -36,17 +36,18 @@ class Scylla:
         """Initialize the custer."""
     async def shutdown(self) -> None:
         """Shutdown the cluster."""
+    async def prepare(self, query: str | Query) -> PreparedQuery: ...
     @overload
     async def execute(
         self,
-        query: str | Query,
+        query: str | Query | PreparedQuery,
         params: Optional[Iterable[Any]] = None,
         as_class: Literal[None] = None,
     ) -> list[dict[str, Any]]: ...
     @overload
     async def execute(
         self,
-        query: str | Query,
+        query: str | Query | PreparedQuery,
         params: Optional[Iterable[Any]] = None,
         as_class: Optional[Callable[..., T]] = None,
     ) -> list[T]: ...
@@ -123,3 +124,6 @@ class SerialConsistency:
 
     SERIAL: "SerialConsistency"
     LOCAL_SERIAL: "SerialConsistency"
+
+class PreparedQuery:
+    """Class that represents prepared statement."""
