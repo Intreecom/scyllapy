@@ -1,19 +1,16 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use openssl::{
     ssl::{SslContextBuilder, SslMethod, SslVerifyMode},
     x509::X509,
 };
-use pyo3::{
-    pyclass, pymethods,
-    types::{PyDict, PyList},
-    PyAny, PyObject, Python, ToPyObject,
-};
-use scylla::{frame::types::Consistency as ScyllaConsistency, query::Query};
+use pyo3::{pyclass, pymethods, PyAny, PyObject, Python};
+use scylla::{batch::Batch, query::Query};
 
 use crate::{
-    consistency::Consistency,
-    utils::{anyhow_py_future, cql_to_py, py_to_cql_value},
+    inputs::{ExecuteInput, PrepareInput},
+    prepared_query::PreparedQuery,
+    utils::{anyhow_py_future, convert_db_response, py_to_cql_value},
 };
 
 #[pyclass(frozen, weakref)]
@@ -144,13 +141,12 @@ impl Scylla {
     /// # Errors
     ///
     /// Can result in an error in any case, when something goes wrong.
-    #[pyo3(signature = (query, params = None, consistency = None, as_class = None))]
+    #[pyo3(signature = (query, params = None, as_class = None))]
     pub fn execute<'a>(
         &'a self,
         py: Python<'a>,
-        query: String,
-        params: Option<&'a PyAny>,
-        consistency: Option<Consistency>,
+        query: ExecuteInput,
+        params: Option<Vec<&'a PyAny>>,
         as_class: Option<PyObject>,
     ) -> anyhow::Result<&'a PyAny> {
         // We need to prepare parameter we're going to use
@@ -159,72 +155,93 @@ impl Scylla {
         // If parameters were passed, we parse python values,
         // to corresponding CQL values.
         if let Some(passed_params) = params {
-            for item in passed_params.iter()? {
-                query_params.push(py_to_cql_value(item?)?);
-            }
+            query_params = passed_params
+                .iter()
+                .map(|item| py_to_cql_value(item))
+                .collect::<anyhow::Result<Vec<_>>>()?;
         }
         // We need this clone, to safely share the session between threads.
         let session_arc = self.scylla_session.clone();
-        let consistency = consistency.map(ScyllaConsistency::from);
         anyhow_py_future(py, async move {
             let session_guard = session_arc.read().await;
             let session = session_guard
                 .as_ref()
                 .ok_or(anyhow::anyhow!("Session is not initialized."))?;
-            // We construct query, using passed query string.
-            let mut cql_query = Query::new(query);
-            if let Some(consistency) = consistency {
-                cql_query.set_consistency(consistency);
-            }
-            let res = session.query(cql_query, query_params).await?;
+            let res = match query {
+                ExecuteInput::Text(text) => session.query(text, query_params).await?,
+                ExecuteInput::Query(query) => session.query(query, query_params).await?,
+                ExecuteInput::PreparedQuery(prepared) => {
+                    session.execute(&prepared.into(), query_params).await?
+                }
+            };
             log::debug!("Query executed!");
-            // Column specs is a class that holds information
-            // about all columns returned by the query.
-            let specs = res.col_specs.clone();
-            if let Ok(rows) = res.rows() {
-                // We need to enable GIL here,
-                // because we're going to create references
-                // in Python's heap memory, so everything
-                // returned by the query may be accessed from python.
-                Python::with_gil(|py| {
-                    let mut dumped_rows = Vec::new();
-                    for row in rows {
-                        let mut map = HashMap::new();
-                        for (index, col) in row.columns.into_iter().enumerate() {
-                            map.insert(
-                                specs[index].name.as_str(),
-                                // Here we convert returned row to python-native type.
-                                cql_to_py(py, &specs[index].typ, col)?,
-                            );
-                        }
-                        dumped_rows.push(map);
-                    }
-                    let py_rows = dumped_rows.to_object(py);
-                    // If user wants to use custom DTO for rows,
-                    // we use call it for every row.
-                    if let Some(parser) = as_class {
-                        let mut result = Vec::new();
-                        let py_rows_list = py_rows.downcast::<PyList>(py).map_err(|_| {
-                            anyhow::anyhow!("Cannot parse returned results as list.")
-                        })?;
-                        for row in py_rows_list {
-                            result.push(parser.call(
-                                py,
-                                (),
-                                // Here we pass returned fields as kwargs.
-                                Some(row.downcast::<PyDict>().map_err(|_| {
-                                    anyhow::anyhow!("Cannot prepare data for calling function")
-                                })?),
-                            )?);
-                        }
-                        return Ok(Some(result.to_object(py)));
-                    }
-                    Ok(Some(py_rows))
-                })
-            } else {
-                Ok(None)
-            }
+            convert_db_response(res, as_class)
         })
         .map_err(Into::into)
+    }
+
+    /// Execute a batch statement.
+    ///
+    /// This function takes a batch and list of lists of params.
+    #[pyo3(signature = (batch, params = None, as_class = None))]
+    pub fn batch<'a>(
+        &'a self,
+        py: Python<'a>,
+        batch: crate::batches::Batch,
+        params: Option<Vec<&'a PyAny>>,
+        as_class: Option<PyObject>,
+    ) -> anyhow::Result<&'a PyAny> {
+        // We need to prepare parameter we're going to use
+        // in query.
+        let mut batch_params = Vec::new();
+        // If parameters were passed, we parse python values,
+        // to corresponding CQL values.
+        if let Some(passed_params) = params {
+            for param_list in passed_params {
+                batch_params.push(
+                    param_list
+                        .iter()?
+                        .map(|item| py_to_cql_value(item?))
+                        .collect::<anyhow::Result<Vec<_>>>()?,
+                );
+            }
+        }
+        let batch = Batch::from(batch);
+        // We need this clone, to safely share the session between threads.
+        let session_arc = self.scylla_session.clone();
+        anyhow_py_future(py, async move {
+            let session_guard = session_arc.read().await;
+            let session = session_guard
+                .as_ref()
+                .ok_or(anyhow::anyhow!("Session is not initialized."))?;
+            let res = session.batch(&batch, batch_params).await?;
+            log::debug!("Query executed!");
+            convert_db_response(res, as_class)
+        })
+        .map_err(Into::into)
+    }
+
+    /// Prepare a query.
+    ///
+    /// This function takes a query to prepare
+    /// and sends it to server.
+    ///
+    /// After preparation it returns a prepared
+    /// query, that you can use later.
+    pub fn prepare<'a>(
+        &'a self,
+        python: Python<'a>,
+        query: PrepareInput,
+    ) -> anyhow::Result<&'a PyAny> {
+        let session_arc = self.scylla_session.clone();
+        anyhow_py_future(python, async move {
+            let cql_query = Query::from(query);
+            let session_guard = session_arc.read().await;
+            let session = session_guard
+                .as_ref()
+                .ok_or(anyhow::anyhow!("Session is not initialized."))?;
+            let prepared = session.prepare(cql_query).await?;
+            Ok(PreparedQuery::from(prepared))
+        })
     }
 }
