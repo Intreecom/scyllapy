@@ -11,7 +11,7 @@ jobs:
     - uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
-        components: fmt
+        components: rustfmt
         override: true
     - name: Check code format
       run: cargo fmt -- --check --config use_try_shorthand=true,imports_granularity=Crate

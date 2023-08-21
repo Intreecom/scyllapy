@@ -100,9 +100,7 @@ pub fn py_to_value(item: &PyAny) -> anyhow::Result<PyToValue> {
         Ok(PyToValue::Uuid(uuid::Uuid::parse_str(
             item.str()?.extract::<&str>()?,
         )?))
-    } else if item.get_type().name()? == "IPv4Address".clone()
-        || item.get_type().name()? == "IPv6Address"
-    {
+    } else if item.get_type().name()? == "IPv4Address" || item.get_type().name()? == "IPv6Address" {
         Ok(PyToValue::Inet(IpAddr::from_str(
             item.str()?.extract::<&str>()?,
         )?))
