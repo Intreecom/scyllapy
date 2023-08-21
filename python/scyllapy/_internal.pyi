@@ -37,26 +37,11 @@ class Scylla:
     async def shutdown(self) -> None:
         """Shutdown the cluster."""
     async def prepare(self, query: str | Query) -> PreparedQuery: ...
-    @overload
     async def execute(
         self,
         query: str | Query | PreparedQuery,
         params: Optional[Iterable[Any]] = None,
-        as_class: Literal[None] = None,
-    ) -> list[dict[str, Any]]: ...
-    @overload
-    async def execute(
-        self,
-        query: str | Query | PreparedQuery,
-        params: Optional[Iterable[Any]] = None,
-        as_class: Optional[Callable[..., T]] = None,
-    ) -> list[T]: ...
-    async def execute(
-        self,
-        query: str | Query,
-        params: Optional[Iterable[Any]] = None,
-        as_class: Any = None,
-    ) -> Any:
+    ) -> QueryResult:
         """
         Execute a query.
 
@@ -71,26 +56,33 @@ class Scylla:
         :param params: list of query parameters.
         :param as_class: DTO class to use for parsing rows (Can be pydantic model or dataclass).
         """
+    async def batch(
+        self,
+        batch: Batch,
+        params: Iterable[Iterable[Any]] | None = None,
+    ) -> QueryResult:
+        """
+        Execute a batch statement.
+
+        Batch statements are useful for grouping multiple queries
+        together and executing them in one query.
+
+        It may speed up you application.
+        """
+
+class QueryResult:
+    trace_id: str | None
+
     @overload
-    async def batch(
-        self,
-        batch: Batch,
-        params: Optional[Iterable[Iterable[Any]]] = None,
-        as_class: Optional[Callable[..., T]] = None,
-    ) -> list[T]: ...
+    def all(self, as_class: Literal[None] = None) -> list[dict[str, Any]]: ...
     @overload
-    async def batch(
-        self,
-        batch: Batch,
-        params: Optional[Iterable[Iterable[Any]]] = None,
-        as_class: Literal[None] = None,
-    ) -> list[dict[str, Any]]: ...
-    async def batch(
-        self,
-        batch: Batch,
-        params: Optional[Iterable[Iterable[Any]]] = None,
-        as_class: Any = None,
-    ) -> Any: ...
+    def all(self, as_class: Callable[..., T] | None = None) -> list[T]: ...
+    def all(self, as_class: Any = None) -> Any: ...
+    @overload
+    def first(self, as_class: Literal[None] = None) -> dict[str, Any] | None: ...
+    @overload
+    def first(self, as_class: Callable[..., T] | None = None) -> T | None: ...
+    def first(self, as_class: Any = None) -> Any: ...
 
 class Query:
     """
