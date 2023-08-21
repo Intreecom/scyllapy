@@ -1,6 +1,6 @@
 # Scylla driver for python
 
-Simlpe to use driver for scyllaDB written in Rust.
+Simple to use driver for scyllaDB written in Rust.
 It uses official driver for scyllaDB for Rust internally and
 integrates it in Python.
 
@@ -16,7 +16,7 @@ async def main():
 You can use parameters in queries.
 
 ```python
-    await scylla.execute("SELECT * FORM table WHERE id IN ? AND name = ?", ([1, 2, 3], "name"))
+    await scylla.execute("SELECT * FROM table WHERE id IN ? AND name = ?", ([1, 2, 3], "name"))
 ```
 
 You can set row type, by passing as_class.
