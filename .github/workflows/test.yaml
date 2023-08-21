@@ -4,6 +4,18 @@ on:
   pull_request:
 
 jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        components: fmt
+        override: true
+    - name: Check code format
+      run: cargo fmt -- --check --config use_try_shorthand=true,imports_granularity=Crate
+
   clippy:
     permissions:
       checks: write
