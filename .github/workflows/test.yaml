@@ -1,0 +1,49 @@
+name: 'Testing package'
+
+on:
+  pull_request:
+
+
+jobs:
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        components: clippy
+        override: true
+    - uses: actions-rs/clippy-check@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        args: --all-features
+  pytest:
+    strategy:
+      matrix:
+        py_version: ["3.8", "3.9", "3.10", "3.11"]
+        job:
+            - os: ubuntu-latest
+              ssl_cmd: sudo apt-get update && sudo apt-get install libssl-dev openssl
+            - os: windows-latest
+              ssl_cmd: vcpkg install openssl:x64-windows-static-md
+            - os: macos-latest
+              ssl_cmd: echo "Already installed"
+    runs-on: ${{matrix.job.os}}
+    steps:
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        components: clippy
+        override: true
+    - name: Setup OpenSSL
+      run: ${{matrix.job.ssl_cmd}}
+    - name: Setup python for test ${{ matrix.py_version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.py_version }}
+    - name: Install tox
+      run: python -m pip install tox-gh>=1.2,<2
+    - name: Run pytest
+      run: tox -v
+
