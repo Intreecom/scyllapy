@@ -71,6 +71,26 @@ class Scylla:
         :param params: list of query parameters.
         :param as_class: DTO class to use for parsing rows (Can be pydantic model or dataclass).
         """
+    @overload
+    async def batch(
+        self,
+        batch: Batch,
+        params: Optional[Iterable[Iterable[Any]]] = None,
+        as_class: Optional[Callable[..., T]] = None,
+    ) -> list[T]: ...
+    @overload
+    async def batch(
+        self,
+        batch: Batch,
+        params: Optional[Iterable[Iterable[Any]]] = None,
+        as_class: Literal[None] = None,
+    ) -> list[dict[str, Any]]: ...
+    async def batch(
+        self,
+        batch: Batch,
+        params: Optional[Iterable[Iterable[Any]]] = None,
+        as_class: Any = None,
+    ) -> Any: ...
 
 class Query:
     """
@@ -85,6 +105,8 @@ class Query:
     consistency: Consistency | None
     serial_consistency: SerialConsistency | None
     request_timeout: int | None
+    is_idempotent: bool | None
+    tracing: bool | None
 
     def __init__(
         self,
@@ -106,6 +128,34 @@ class Query:
     def with_is_idempotent(self, is_idempotent: bool | None) -> Query: ...
     def with_tracing(self, tracing: bool | None) -> Query: ...
 
+class BatchType:
+    """Possible BatchTypes."""
+
+    COUNTER: BatchType
+    LOGGED: BatchType
+    UNLOGGED: BatchType
+
+class Batch:
+    """Class for batching queries together."""
+
+    consistency: Consistency | None
+    serial_consistency: SerialConsistency | None
+    request_timeout: int | None
+    is_idempotent: bool | None
+    tracing: bool | None
+
+    def __init__(
+        self,
+        batch_type: BatchType = BatchType.UNLOGGED,
+        consistency: Consistency | None = None,
+        serial_consistency: SerialConsistency | None = None,
+        request_timeout: int | None = None,
+        timestamp: int | None = None,
+        is_idempotent: bool | None = None,
+        tracing: bool | None = None,
+    ) -> None: ...
+    def add_query(self, query: Query | PreparedQuery | str) -> None: ...
+
 class Consistency:
     """Consistency for query."""
 
@@ -122,8 +172,8 @@ class Consistency:
 class SerialConsistency:
     """Serial consistency for query."""
 
-    SERIAL: "SerialConsistency"
-    LOCAL_SERIAL: "SerialConsistency"
+    SERIAL: SerialConsistency
+    LOCAL_SERIAL: SerialConsistency
 
 class PreparedQuery:
     """Class that represents prepared statement."""
