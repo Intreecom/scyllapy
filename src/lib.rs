@@ -3,6 +3,7 @@ pub mod consistencies;
 pub mod inputs;
 pub mod prepared_query;
 pub mod query;
+pub mod query_results;
 pub mod scylla_cls;
 pub mod utils;
 
@@ -19,5 +20,6 @@ fn _internal(_py: Python<'_>, pymod: &PyModule) -> PyResult<()> {
     pymod.add_class::<prepared_query::PreparedQuery>()?;
     pymod.add_class::<batches::Batch>()?;
     pymod.add_class::<batches::BatchType>()?;
+    pymod.add_class::<query_results::ScyllaPyQueryResult>()?;
     Ok(())
 }

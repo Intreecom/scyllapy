@@ -4,13 +4,14 @@ use openssl::{
     ssl::{SslContextBuilder, SslMethod, SslVerifyMode},
     x509::X509,
 };
-use pyo3::{pyclass, pymethods, PyAny, PyObject, Python};
+use pyo3::{pyclass, pymethods, PyAny, Python};
 use scylla::{batch::Batch, query::Query};
 
 use crate::{
     inputs::{ExecuteInput, PrepareInput},
     prepared_query::PreparedQuery,
-    utils::{anyhow_py_future, convert_db_response, py_to_cql_value},
+    query_results::ScyllaPyQueryResult,
+    utils::{anyhow_py_future, py_to_cql_value},
 };
 
 #[pyclass(frozen, weakref)]
@@ -141,13 +142,12 @@ impl Scylla {
     /// # Errors
     ///
     /// Can result in an error in any case, when something goes wrong.
-    #[pyo3(signature = (query, params = None, as_class = None))]
+    #[pyo3(signature = (query, params = None))]
     pub fn execute<'a>(
         &'a self,
         py: Python<'a>,
         query: ExecuteInput,
         params: Option<Vec<&'a PyAny>>,
-        as_class: Option<PyObject>,
     ) -> anyhow::Result<&'a PyAny> {
         // We need to prepare parameter we're going to use
         // in query.
@@ -175,7 +175,7 @@ impl Scylla {
                 }
             };
             log::debug!("Query executed!");
-            convert_db_response(res, as_class)
+            Ok(ScyllaPyQueryResult::new(res))
         })
         .map_err(Into::into)
     }
@@ -183,13 +183,12 @@ impl Scylla {
     /// Execute a batch statement.
     ///
     /// This function takes a batch and list of lists of params.
-    #[pyo3(signature = (batch, params = None, as_class = None))]
+    #[pyo3(signature = (batch, params = None))]
     pub fn batch<'a>(
         &'a self,
         py: Python<'a>,
         batch: crate::batches::Batch,
         params: Option<Vec<&'a PyAny>>,
-        as_class: Option<PyObject>,
     ) -> anyhow::Result<&'a PyAny> {
         // We need to prepare parameter we're going to use
         // in query.
@@ -216,7 +215,7 @@ impl Scylla {
                 .ok_or(anyhow::anyhow!("Session is not initialized."))?;
             let res = session.batch(&batch, batch_params).await?;
             log::debug!("Query executed!");
-            convert_db_response(res, as_class)
+            Ok(ScyllaPyQueryResult::new(res))
         })
         .map_err(Into::into)
     }

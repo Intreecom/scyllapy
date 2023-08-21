@@ -1,4 +1,4 @@
-use std::{collections::HashMap, future::Future};
+use std::future::Future;
 
 use pyo3::{
     types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PySet, PyString, PyTuple},
@@ -7,7 +7,6 @@ use pyo3::{
 use scylla::{
     _macro_internal::{CqlValue, Value},
     frame::response::result::ColumnType,
-    QueryResult,
 };
 
 /// Small function to integrate anyhow result
@@ -89,7 +88,7 @@ pub fn py_to_cql_value(item: &PyAny) -> anyhow::Result<Box<dyn Value + Send + Sy
 pub fn cql_to_py<'a>(
     py: Python<'a>,
     cql_type: &'a ColumnType,
-    cql_value: Option<CqlValue>,
+    cql_value: Option<&CqlValue>,
 ) -> anyhow::Result<&'a PyAny> {
     let Some(unwrapped_value) = cql_value else{
         return Ok(py.None().into_ref(py));
@@ -133,7 +132,7 @@ pub fn cql_to_py<'a>(
                 .as_list()
                 .ok_or(anyhow::anyhow!("Cannot parse"))?
                 .iter()
-                .map(|val| cql_to_py(py, column_type.as_ref(), Some(val.clone())))
+                .map(|val| cql_to_py(py, column_type.as_ref(), Some(val)))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(items.to_object(py).into_ref(py))
         }
@@ -144,8 +143,8 @@ pub fn cql_to_py<'a>(
                 .iter()
                 .map(|(key, val)| -> anyhow::Result<(&'a PyAny, &'a PyAny)> {
                     Ok((
-                        cql_to_py(py, key_type, Some(key.clone()))?,
-                        cql_to_py(py, val_type, Some(val.clone()))?,
+                        cql_to_py(py, key_type, Some(key))?,
+                        cql_to_py(py, val_type, Some(val))?,
                     ))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
@@ -161,7 +160,7 @@ pub fn cql_to_py<'a>(
                 .as_set()
                 .ok_or(anyhow::anyhow!("Cannot parse"))?
                 .iter()
-                .map(|val| cql_to_py(py, column_type.as_ref(), Some(val.clone())))
+                .map(|val| cql_to_py(py, column_type.as_ref(), Some(val)))
                 .collect::<Result<Vec<_>, _>>()?;
             let res_set = PySet::new(py, items)?;
             Ok(res_set)
@@ -201,63 +200,36 @@ pub fn cql_to_py<'a>(
     }
 }
 
-/// Convert `QueryResult` to some Python-native object.
+/// Map rows, using some python callable.
 ///
-/// the `as_class` parameter is supplied by users.
-/// It should be a callable python object, that returns
-/// some DTO. It's called with key-word only arguments.
+/// This function casts every row to dictionary
+/// and passes it as key-word arguments to the
+/// `as_class` function. Returned values are
+/// then written in a new vector of mapped rows.
 ///
 /// # Errors
-///
-/// Can result in an error in two main cases.
-/// * Resulting rows cannot be parsed as list.
-/// * Dict that used as kwargs cannot be downcasted as dict.
-pub fn convert_db_response(
-    res: QueryResult,
-    as_class: Option<PyObject>,
-) -> anyhow::Result<Option<Py<PyAny>>> {
-    let specs = res.col_specs.clone();
-    if let Ok(rows) = res.rows() {
-        // We need to enable GIL here,
-        // because we're going to create references
-        // in Python's heap memory, so everything
-        // returned by the query may be accessed from python.
-        Python::with_gil(|py| {
-            let mut dumped_rows = Vec::new();
-            for row in rows {
-                let mut map = HashMap::new();
-                for (index, col) in row.columns.into_iter().enumerate() {
-                    map.insert(
-                        specs[index].name.as_str(),
-                        // Here we convert returned row to python-native type.
-                        cql_to_py(py, &specs[index].typ, col)?,
-                    );
-                }
-                dumped_rows.push(map);
-            }
-            let py_rows = dumped_rows.to_object(py);
-            // If user wants to use custom DTO for rows,
-            // we use call it for every row.
-            if let Some(parser) = as_class {
-                let mut result = Vec::new();
-                let py_rows_list = py_rows
-                    .downcast::<PyList>(py)
-                    .map_err(|_| anyhow::anyhow!("Cannot parse returned results as list."))?;
-                for row in py_rows_list {
-                    result.push(parser.call(
-                        py,
-                        (),
-                        // Here we pass returned fields as kwargs.
-                        Some(row.downcast::<PyDict>().map_err(|_| {
-                            anyhow::anyhow!("Cannot prepare data for calling function")
-                        })?),
-                    )?);
-                }
-                return Ok(Some(result.to_object(py)));
-            }
-            Ok(Some(py_rows))
+/// May result in an error if
+/// * `rows` object cannot be casted to `PyList`;
+/// * At least one row cannot be casted to dict.
+pub fn map_rows<'a>(
+    py: Python<'a>,
+    rows: &'a Py<PyAny>,
+    as_class: &'a Py<PyAny>,
+) -> anyhow::Result<Vec<Py<PyAny>>> {
+    let mapped_rows = rows
+        .downcast::<PyList>(py)
+        .map_err(|_| anyhow::anyhow!("Cannot downcast rows to list."))?
+        .iter()
+        .map(|obj| {
+            as_class.call(
+                py,
+                (),
+                Some(
+                    obj.downcast::<PyDict>()
+                        .map_err(|_| anyhow::anyhow!("Cannot preapre kwargs for mapping."))?,
+                ),
+            )
         })
-    } else {
-        Ok(None)
-    }
+        .collect::<anyhow::Result<Vec<_>, _>>()?;
+    Ok(mapped_rows)
 }
