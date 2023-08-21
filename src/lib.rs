@@ -1,5 +1,6 @@
 pub mod consistencies;
 pub mod inputs;
+pub mod prepared_query;
 pub mod query;
 pub mod scylla_cls;
 pub mod utils;
@@ -14,5 +15,6 @@ fn _internal(_py: Python<'_>, pymod: &PyModule) -> PyResult<()> {
     pymod.add_class::<consistencies::Consistency>()?;
     pymod.add_class::<consistencies::SerialConsistency>()?;
     pymod.add_class::<query::Query>()?;
+    pymod.add_class::<prepared_query::PreparedQuery>()?;
     Ok(())
 }

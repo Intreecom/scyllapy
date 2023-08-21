@@ -12,7 +12,8 @@ use pyo3::{
 use scylla::query::Query;
 
 use crate::{
-    inputs::QueryInput,
+    inputs::{ExecuteInput, PrepareInput},
+    prepared_query::PreparedQuery,
     utils::{anyhow_py_future, cql_to_py, py_to_cql_value},
 };
 
@@ -148,7 +149,7 @@ impl Scylla {
     pub fn execute<'a>(
         &'a self,
         py: Python<'a>,
-        query: QueryInput,
+        query: ExecuteInput,
         params: Option<&'a PyAny>,
         as_class: Option<PyObject>,
     ) -> anyhow::Result<&'a PyAny> {
@@ -164,14 +165,18 @@ impl Scylla {
         }
         // We need this clone, to safely share the session between threads.
         let session_arc = self.scylla_session.clone();
-        let cql_query = Query::from(query);
         anyhow_py_future(py, async move {
             let session_guard = session_arc.read().await;
             let session = session_guard
                 .as_ref()
                 .ok_or(anyhow::anyhow!("Session is not initialized."))?;
-            // We construct query, using passed query string.
-            let res = session.query(cql_query, query_params).await?;
+            let res = match query {
+                ExecuteInput::Text(text) => session.query(text, query_params).await?,
+                ExecuteInput::Query(query) => session.query(query, query_params).await?,
+                ExecuteInput::PreparedQuery(prepared) => {
+                    session.execute(&prepared.into(), query_params).await?
+                }
+            };
             log::debug!("Query executed!");
             // Column specs is a class that holds information
             // about all columns returned by the query.
@@ -221,5 +226,29 @@ impl Scylla {
             }
         })
         .map_err(Into::into)
+    }
+
+    /// Prepare a query.
+    ///
+    /// This function takes a query to prepare
+    /// and sends it to server.
+    ///
+    /// After preparation it returns a prepared
+    /// query, that you can use later.
+    pub fn prepare<'a>(
+        &'a self,
+        python: Python<'a>,
+        query: PrepareInput,
+    ) -> anyhow::Result<&'a PyAny> {
+        let session_arc = self.scylla_session.clone();
+        anyhow_py_future(python, async move {
+            let cql_query = Query::from(query);
+            let session_guard = session_arc.read().await;
+            let session = session_guard
+                .as_ref()
+                .ok_or(anyhow::anyhow!("Session is not initialized."))?;
+            let prepared = session.prepare(cql_query).await?;
+            Ok(PreparedQuery::from(prepared))
+        })
     }
 }
