@@ -8,8 +8,9 @@ use pyo3::{pyclass, pymethods, PyAny, Python};
 use scylla::{batch::Batch, query::Query};
 
 use crate::{
+    batches::ScyllaPyBatch,
     inputs::{ExecuteInput, PrepareInput},
-    prepared_query::PreparedQuery,
+    prepared_queries::ScyllaPyPreparedQuery,
     query_results::ScyllaPyQueryResult,
     utils::{anyhow_py_future, py_to_cql_value},
 };
@@ -187,7 +188,7 @@ impl Scylla {
     pub fn batch<'a>(
         &'a self,
         py: Python<'a>,
-        batch: crate::batches::Batch,
+        batch: ScyllaPyBatch,
         params: Option<Vec<&'a PyAny>>,
     ) -> anyhow::Result<&'a PyAny> {
         // We need to prepare parameter we're going to use
@@ -240,7 +241,7 @@ impl Scylla {
                 .as_ref()
                 .ok_or(anyhow::anyhow!("Session is not initialized."))?;
             let prepared = session.prepare(cql_query).await?;
-            Ok(PreparedQuery::from(prepared))
+            Ok(ScyllaPyPreparedQuery::from(prepared))
         })
     }
 }

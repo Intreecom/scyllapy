@@ -1,18 +1,18 @@
 use std::time::Duration;
 
-use crate::consistencies::{Consistency, SerialConsistency};
+use crate::consistencies::{ScyllaPyConsistency, ScyllaPySerialConsistency};
 use pyo3::{pyclass, pymethods, Python};
-use scylla::statement::query::Query as ScyllaQuery;
+use scylla::statement::query::Query;
 
-#[pyclass]
+#[pyclass(name = "Query")]
 #[derive(Clone, Debug)]
-pub struct Query {
+pub struct ScyllaPyQuery {
     #[pyo3(get)]
     pub query: String,
     #[pyo3(get)]
-    pub consistency: Option<Consistency>,
+    pub consistency: Option<ScyllaPyConsistency>,
     #[pyo3(get)]
-    pub serial_consistency: Option<SerialConsistency>,
+    pub serial_consistency: Option<ScyllaPySerialConsistency>,
     #[pyo3(get)]
     pub request_timeout: Option<u64>,
     #[pyo3(get)]
@@ -23,9 +23,9 @@ pub struct Query {
     pub tracing: Option<bool>,
 }
 
-impl From<&Query> for Query {
-    fn from(value: &Query) -> Self {
-        Query {
+impl From<&ScyllaPyQuery> for ScyllaPyQuery {
+    fn from(value: &ScyllaPyQuery) -> Self {
+        ScyllaPyQuery {
             query: value.query.clone(),
             consistency: value.consistency,
             serial_consistency: value.serial_consistency,
@@ -38,7 +38,7 @@ impl From<&Query> for Query {
 }
 
 #[pymethods]
-impl Query {
+impl ScyllaPyQuery {
     #[new]
     #[pyo3(signature = (
         query,
@@ -54,8 +54,8 @@ impl Query {
     pub fn py_new(
         _py: Python<'_>,
         query: String,
-        consistency: Option<Consistency>,
-        serial_consistency: Option<SerialConsistency>,
+        consistency: Option<ScyllaPyConsistency>,
+        serial_consistency: Option<ScyllaPySerialConsistency>,
         request_timeout: Option<u64>,
         timestamp: Option<i64>,
         is_idempotent: Option<bool>,
@@ -78,14 +78,17 @@ impl Query {
     }
 
     #[must_use]
-    pub fn with_consistency(&self, consistency: Option<Consistency>) -> Self {
+    pub fn with_consistency(&self, consistency: Option<ScyllaPyConsistency>) -> Self {
         let mut query = Self::from(self);
         query.consistency = consistency;
         query
     }
 
     #[must_use]
-    pub fn with_serial_consistency(&self, serial_consistency: Option<SerialConsistency>) -> Self {
+    pub fn with_serial_consistency(
+        &self,
+        serial_consistency: Option<ScyllaPySerialConsistency>,
+    ) -> Self {
         let mut query = Self::from(self);
         query.serial_consistency = serial_consistency;
         query
@@ -120,8 +123,8 @@ impl Query {
     }
 }
 
-impl From<Query> for ScyllaQuery {
-    fn from(value: Query) -> Self {
+impl From<ScyllaPyQuery> for Query {
+    fn from(value: ScyllaPyQuery) -> Self {
         let mut query = Self::new(value.query);
         if let Some(consistency) = value.consistency {
             query.set_consistency(consistency.into());
