@@ -299,4 +299,42 @@ impl Scylla {
             Ok(ScyllaPyPreparedQuery::from(prepared))
         })
     }
+
+    /// Set keyspace to all connections.
+    ///
+    /// # Errors
+    /// May return an error, if
+    /// sessions was not initialized.
+    pub fn use_keyspace<'a>(
+        &'a self,
+        python: Python<'a>,
+        keyspace: String,
+    ) -> anyhow::Result<&'a PyAny> {
+        let session_arc = self.scylla_session.clone();
+        anyhow_py_future(python, async move {
+            let guard = session_arc.write().await;
+            let session = guard
+                .as_ref()
+                .ok_or(anyhow::anyhow!("Session is not initialized."))?;
+            session.use_keyspace(keyspace, true).await?;
+            Ok(())
+        })
+    }
+
+    /// Get current keyspace.
+    ///
+    /// # Errors
+    /// May return an error, if
+    /// sessions was not initialized.
+    pub fn get_keyspace<'a>(&'a self, python: Python<'a>) -> anyhow::Result<&'a PyAny> {
+        let session_arc = self.scylla_session.clone();
+        anyhow_py_future(python, async move {
+            let guard = session_arc.write().await;
+            let session = guard
+                .as_ref()
+                .ok_or(anyhow::anyhow!("Session is not initialized."))?;
+            let keyspace = session.get_keyspace().map(|ks| (*ks).clone());
+            Ok(keyspace)
+        })
+    }
 }
