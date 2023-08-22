@@ -20,6 +20,14 @@ class Scylla:
         keyspace: str | None = None,
         ssl_cert: str | None = None,
         conn_timeout: int | None = None,
+        write_coalescing: bool | None = None,
+        pool_size_per_host: int | None = None,
+        pool_size_per_shard: int | None = None,
+        keepalive_interval: int | None = None,
+        keepalive_timeout: int | None = None,
+        tcp_keepalive_interval: int | None = None,
+        tcp_nodelay: bool | None = None,
+        disallow_shard_aware_port: bool | None = None,
     ) -> None:
         """
         Configure cluster for later use.
@@ -31,6 +39,22 @@ class Scylla:
         :param ssl_cert: Certficiate string to use
             for connection. AWS requires it.
         :param conn_timeout: Timeout in seconds.
+        :param write_coalescing:
+            If true, the driver will inject a small delay before flushing data
+            to the socket - by rescheduling the task that writes data to the socket.
+            This gives the task an opportunity to collect more write requests
+            and write them in a single syscall, increasing the efficiency.
+        :param pool_size_per_host: how many connections should be established
+            to the node.
+        :param pool_size_per_host: how many connections should be established
+            to each shard of the node.
+        :param keepalive_interval: How ofter to send keepalive messages,
+            when connection is idling. In seconds.
+        :param keepalive_timeout: sets keepalive timeout.
+        :param tcp_keepalive_interval: Sets TCP keepalive interval.
+        :param tcp_nodelay: sets TCP nodelay flag.
+        :param disallow_shard_aware_port: If true, prevents the driver from connecting to the shard-aware port,
+            even if the node supports it.
         """
     async def startup(self) -> None:
         """Initialize the custer."""
@@ -40,7 +64,7 @@ class Scylla:
     async def execute(
         self,
         query: str | Query | PreparedQuery,
-        params: Optional[Iterable[Any]] = None,
+        params: Optional[Iterable[Any] | dict[str, Any]] = None,
     ) -> QueryResult:
         """
         Execute a query.
@@ -52,6 +76,10 @@ class Scylla:
 
         await scylla.execute("SELECT * FROM table WHERE id = ?", [11])
 
+        Or you can use named parameters and pass dict to execute. Like this:
+
+        await scylla.execute("SELECT * FROM table WHERE id = :id", {"id": 11})
+
         :param query: query to use.
         :param params: list of query parameters.
         :param as_class: DTO class to use for parsing rows (Can be pydantic model or dataclass).
@@ -59,7 +87,7 @@ class Scylla:
     async def batch(
         self,
         batch: Batch,
-        params: Iterable[Iterable[Any]] | None = None,
+        params: Optional[Iterable[Iterable[Any] | dict[str, Any]]] = None,
     ) -> QueryResult:
         """
         Execute a batch statement.
@@ -67,8 +95,14 @@ class Scylla:
         Batch statements are useful for grouping multiple queries
         together and executing them in one query.
 
+        Each element of a list associated
+
         It may speed up you application.
         """
+    async def use_keyspace(self, keyspace: str) -> None:
+        """Change current keyspace for all connections."""
+    async def get_keyspace(self) -> str | None:
+        """Get current keyspace."""
 
 class QueryResult:
     trace_id: str | None

@@ -85,6 +85,21 @@ new_query = query.with_consistency(Consistency.ALL)
 
 All `with_` methods create new query, copying all other parameters.
 
+## Named parameters
+
+Also, you can provide named parameters to querties, by using name
+placeholders instead of `?`.
+
+For example:
+
+```python
+async def insert(scylla: Scylla):
+    await scylla.execute(
+        "INSERT INTO table(id, name) VALUES (:id, :name)",
+        params={"id": uuid.uuid4(), "name": uuid.uuid4().hex}
+    )
+```
+
 ## Preparing queries
 
 Also, queries can be prepared. You can either prepare raw strings, or `Query` objects.
@@ -120,7 +135,18 @@ async def run_batch(scylla: Scylla, num_queries: int) -> None:
     await scylla.batch(batch, [(i,) for i in range(num_queries)])
 ```
 
-Here we pass strings. But you can also add Prepared statements to batches.
+Here we pass query as strings. But you can also add Prepared statements or Query objects.
+
+Also, note that we pass list of lists as parametes for execute. Each element of
+the list is going to be used in the query with the same index. But named parameters
+are not supported for batches.
+
+```python
+async def run_batch(scylla: Scylla, num_queries: int) -> None:
+    batch = Batch()
+    batch.add_query("SELECT * FROM table WHERE id = :id")
+    await scylla.batch(batch, [{"id": 1}])  # Will rase an error!
+```
 
 ### Results
 
