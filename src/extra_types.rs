@@ -49,5 +49,6 @@ pub fn add_module<'a>(py: Python<'a>, name: &'static str) -> PyResult<&'a PyModu
     module.add_class::<TinyInt>()?;
     module.add_class::<BigInt>()?;
     module.add_class::<Double>()?;
+    module.add_class::<Counter>()?;
     Ok(module)
 }
