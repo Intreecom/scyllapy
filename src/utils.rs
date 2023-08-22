@@ -1,4 +1,4 @@
-use std::{future::Future, str::FromStr};
+use std::{collections::HashMap, future::Future, str::FromStr};
 
 use pyo3::{
     types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PySet, PyString, PyTuple},
@@ -11,7 +11,7 @@ use scylla::{
 
 use std::net::IpAddr;
 
-use crate::extra_types::{BigInt, Double, SmallInt, TinyInt};
+use crate::extra_types::{BigInt, Counter, Double, SmallInt, TinyInt};
 
 /// Small function to integrate anyhow result
 /// and `pyo3_asyncio`.
@@ -33,36 +33,55 @@ where
     Ok(res)
 }
 
-pub enum PyToValue {
+/// This class is used to transfer
+/// data between python and rust.
+///
+/// This enum implements Value interface,
+/// and any of it's variants can
+/// be bound to query.
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub enum ScyllaPyCQLDTO {
     String(String),
     BigInt(i64),
     Int(i32),
     SmallInt(i16),
     TinyInt(i8),
+    Counter(i64),
     Bool(bool),
-    Double(f64),
-    Float(f32),
+    Double(eq_float::F64),
+    Float(eq_float::F32),
     Bytes(Vec<u8>),
+    Date(chrono::NaiveDate),
+    Time(chrono::Duration),
     Uuid(uuid::Uuid),
     Inet(IpAddr),
-    List(Vec<PyToValue>),
+    List(Vec<ScyllaPyCQLDTO>),
+    Map(Vec<(ScyllaPyCQLDTO, ScyllaPyCQLDTO)>),
 }
 
-impl Value for PyToValue {
+impl Value for ScyllaPyCQLDTO {
     fn serialize(&self, buf: &mut Vec<u8>) -> Result<(), scylla::_macro_internal::ValueTooBig> {
         match self {
-            PyToValue::String(s) => s.serialize(buf),
-            PyToValue::BigInt(i) => i.serialize(buf),
-            PyToValue::Int(i) => i.serialize(buf),
-            PyToValue::SmallInt(i) => i.serialize(buf),
-            PyToValue::Bool(b) => b.serialize(buf),
-            PyToValue::Double(d) => d.serialize(buf),
-            PyToValue::Float(f) => f.serialize(buf),
-            PyToValue::Bytes(b) => b.serialize(buf),
-            PyToValue::Uuid(u) => u.serialize(buf),
-            PyToValue::Inet(i) => i.serialize(buf),
-            PyToValue::List(l) => l.serialize(buf),
-            PyToValue::TinyInt(t) => t.serialize(buf),
+            ScyllaPyCQLDTO::String(string) => string.serialize(buf),
+            ScyllaPyCQLDTO::BigInt(bigint) => bigint.serialize(buf),
+            ScyllaPyCQLDTO::Int(int) => int.serialize(buf),
+            ScyllaPyCQLDTO::SmallInt(smallint) => smallint.serialize(buf),
+            ScyllaPyCQLDTO::Bool(blob) => blob.serialize(buf),
+            ScyllaPyCQLDTO::Double(double) => double.0.serialize(buf),
+            ScyllaPyCQLDTO::Float(float) => float.0.serialize(buf),
+            ScyllaPyCQLDTO::Bytes(bytes) => bytes.serialize(buf),
+            ScyllaPyCQLDTO::Uuid(uuid) => uuid.serialize(buf),
+            ScyllaPyCQLDTO::Inet(inet) => inet.serialize(buf),
+            ScyllaPyCQLDTO::List(list) => list.serialize(buf),
+            ScyllaPyCQLDTO::Counter(counter) => counter.serialize(buf),
+            ScyllaPyCQLDTO::TinyInt(tinyint) => tinyint.serialize(buf),
+            ScyllaPyCQLDTO::Date(date) => date.serialize(buf),
+            ScyllaPyCQLDTO::Time(time) => scylla::frame::value::Time(*time).serialize(buf),
+            ScyllaPyCQLDTO::Map(map) => map
+                .iter()
+                .cloned()
+                .collect::<HashMap<_, _>>()
+                .serialize(buf),
         }
     }
 }
@@ -77,42 +96,81 @@ impl Value for PyToValue {
 ///
 /// May raise an error, if
 /// value cannot be converted or unnown type was passed.
-pub fn py_to_value(item: &PyAny) -> anyhow::Result<PyToValue> {
+pub fn py_to_value(item: &PyAny) -> anyhow::Result<ScyllaPyCQLDTO> {
     if item.is_instance_of::<PyString>() {
-        Ok(PyToValue::String(item.extract::<String>()?))
-    } else if item.is_instance_of::<PyInt>() {
-        Ok(PyToValue::BigInt(item.extract::<i64>()?))
+        Ok(ScyllaPyCQLDTO::String(item.extract::<String>()?))
     } else if item.is_instance_of::<PyBool>() {
-        Ok(PyToValue::Bool(item.extract::<bool>()?))
+        Ok(ScyllaPyCQLDTO::Bool(item.extract::<bool>()?))
+    } else if item.is_instance_of::<PyInt>() {
+        Ok(ScyllaPyCQLDTO::Int(item.extract::<i32>()?))
     } else if item.is_instance_of::<PyFloat>() {
-        Ok(PyToValue::Float(item.extract::<f32>()?))
+        Ok(ScyllaPyCQLDTO::Float(eq_float::F32(item.extract::<f32>()?)))
     } else if item.is_instance_of::<SmallInt>() {
-        Ok(PyToValue::SmallInt(item.extract::<SmallInt>()?.get_value()))
+        Ok(ScyllaPyCQLDTO::SmallInt(
+            item.extract::<SmallInt>()?.get_value(),
+        ))
     } else if item.is_instance_of::<TinyInt>() {
-        Ok(PyToValue::TinyInt(item.extract::<TinyInt>()?.get_value()))
+        Ok(ScyllaPyCQLDTO::TinyInt(
+            item.extract::<TinyInt>()?.get_value(),
+        ))
     } else if item.is_instance_of::<BigInt>() {
-        Ok(PyToValue::BigInt(item.extract::<BigInt>()?.get_value()))
+        Ok(ScyllaPyCQLDTO::BigInt(
+            item.extract::<BigInt>()?.get_value(),
+        ))
     } else if item.is_instance_of::<Double>() {
-        Ok(PyToValue::Double(item.extract::<Double>()?.get_value()))
+        Ok(ScyllaPyCQLDTO::Double(eq_float::F64(
+            item.extract::<Double>()?.get_value(),
+        )))
+    } else if item.is_instance_of::<Counter>() {
+        Ok(ScyllaPyCQLDTO::Counter(
+            item.extract::<Counter>()?.get_value(),
+        ))
     } else if item.is_instance_of::<PyBytes>() {
-        Ok(PyToValue::Bytes(item.extract::<Vec<u8>>()?))
+        Ok(ScyllaPyCQLDTO::Bytes(item.extract::<Vec<u8>>()?))
     } else if item.get_type().name()? == "UUID" {
-        Ok(PyToValue::Uuid(uuid::Uuid::parse_str(
+        Ok(ScyllaPyCQLDTO::Uuid(uuid::Uuid::parse_str(
             item.str()?.extract::<&str>()?,
         )?))
     } else if item.get_type().name()? == "IPv4Address" || item.get_type().name()? == "IPv6Address" {
-        Ok(PyToValue::Inet(IpAddr::from_str(
+        Ok(ScyllaPyCQLDTO::Inet(IpAddr::from_str(
             item.str()?.extract::<&str>()?,
         )?))
+    } else if item.get_type().name()? == "date" {
+        Ok(ScyllaPyCQLDTO::Date(chrono::NaiveDate::from_str(
+            item.call_method0("isoformat")?.extract::<&str>()?,
+        )?))
+    } else if item.get_type().name()? == "time" {
+        Ok(ScyllaPyCQLDTO::Time(
+            chrono::NaiveTime::from_str(item.call_method0("isoformat")?.extract::<&str>()?)?
+                .signed_duration_since(
+                    chrono::NaiveTime::from_num_seconds_from_midnight_opt(0, 0)
+                        .ok_or(anyhow::anyhow!("Cannot calculate offset from midnight."))?,
+                ),
+        ))
     } else if item.is_instance_of::<PyList>()
-        || item.is_exact_instance_of::<PyTuple>()
-        || item.is_exact_instance_of::<PySet>()
+        || item.is_instance_of::<PyTuple>()
+        || item.is_instance_of::<PySet>()
     {
         let mut items = Vec::new();
         for inner in item.iter()? {
             items.push(py_to_value(inner?)?);
         }
-        Ok(PyToValue::List(items))
+        Ok(ScyllaPyCQLDTO::List(items))
+    } else if item.is_instance_of::<PyDict>() {
+        let dict = item
+            .downcast::<PyDict>()
+            .map_err(|err| anyhow::anyhow!("Cannot cast to dict: {err}"))?;
+        let mut items = Vec::new();
+        for dict_item in dict.items().iter() {
+            let item_tuple = dict_item
+                .downcast::<PyTuple>()
+                .map_err(|err| anyhow::anyhow!("Cannot cast to tuple: {err}"))?;
+            items.push((
+                py_to_value(item_tuple.get_item(0)?)?,
+                py_to_value(item_tuple.get_item(1)?)?,
+            ));
+        }
+        Ok(ScyllaPyCQLDTO::Map(items))
     } else {
         let type_name = item.get_type().name()?;
         Err(anyhow::anyhow!(
@@ -293,8 +351,24 @@ pub fn cql_to_py<'a>(
                 Err(anyhow::anyhow!("Cannot parse as tuple."))
             }
         }
-        ColumnType::Time => Err(anyhow::anyhow!("Time is not yet supported.")),
-        ColumnType::Counter => Err(anyhow::anyhow!("Counter is not yet supported.")),
+        ColumnType::Counter => Ok(unwrapped_value
+            .as_counter()
+            .ok_or(anyhow::anyhow!("Cannot parse counter"))?
+            .0
+            .to_object(py)
+            .into_ref(py)),
+        ColumnType::Time => {
+            let duration = unwrapped_value
+                .as_duration()
+                .ok_or(anyhow::anyhow!("Cannot parse time"))?;
+            let time = chrono::NaiveTime::from_num_seconds_from_midnight_opt(0, 0)
+                .ok_or(anyhow::anyhow!("Cannot calculate midnight time"))?
+                + duration;
+            Ok(py
+                .import("datetime")?
+                .getattr("time")?
+                .call_method1("fromisoformat", (time.format("%H:%M:%S%.6f").to_string(),))?)
+        }
         ColumnType::Custom(_) => Err(anyhow::anyhow!("Custom types are not yet supported.")),
         ColumnType::Varint => Err(anyhow::anyhow!("Variant is not yet supported.")),
         ColumnType::Decimal => Err(anyhow::anyhow!("Decimals are not yet supported.")),

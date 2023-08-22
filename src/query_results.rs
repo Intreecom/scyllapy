@@ -95,6 +95,61 @@ impl ScyllaPyQueryResult {
         Ok(Some(rows[0].to_object(py)))
     }
 
+    /// Function to get first column of every row.
+    ///
+    /// This function grabs rows from all function and
+    /// tries to get the first column of any row.
+    ///
+    /// # Erros
+    ///
+    /// May result in an error if:
+    /// * Query doesn't have a returns;
+    /// * Results don't have any columns.
+    pub fn scalars(&self, py: Python<'_>) -> anyhow::Result<Option<Py<PyAny>>> {
+        let Some(rows) = self.get_rows(py, None)? else{
+            return Err(anyhow::anyhow!("The query doesn't have returns ."));
+        };
+        if rows.is_empty() {
+            return Ok(None);
+        }
+        let Some(col_name) = self.inner.col_specs.first() else{
+            return Err(anyhow::anyhow!("Cannot find any columns"));
+        };
+        Ok(Some(
+            rows.iter()
+                .filter_map(|row| row.get(col_name.name.as_str()))
+                .collect::<Vec<_>>()
+                .to_object(py),
+        ))
+    }
+
+    /// Function to get first column of first row.
+    ///
+    /// This function grabs first row and
+    /// tries to get the first column of a result.
+    ///
+    /// # Erros
+    ///
+    /// May result in an error if:
+    /// * Query doesn't have a returns;
+    /// * Results don't have any columns.
+    pub fn scalar(&self, py: Python<'_>) -> anyhow::Result<Option<Py<PyAny>>> {
+        let Some(rows) = self.get_rows(py, Some(1))? else{
+            return Err(anyhow::anyhow!("The query doesn't have returns ."));
+        };
+        if rows.is_empty() {
+            return Ok(None);
+        }
+        let Some(col_name) = self.inner.col_specs.first() else{
+            return Err(anyhow::anyhow!("Cannot find any columns"));
+        };
+        Ok(Some(
+            rows.first()
+                .and_then(|row| row.get(col_name.name.as_str()))
+                .to_object(py),
+        ))
+    }
+
     #[getter]
     pub fn trace_id<'a>(&'a self, py: Python<'a>) -> Option<Py<PyAny>> {
         self.inner

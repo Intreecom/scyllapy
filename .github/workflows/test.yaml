@@ -33,16 +33,28 @@ jobs:
         args: -p scyllapy --all-features -- -W clippy::all -W clippy::pedantic -D warnings
   pytest:
     name: ${{matrix.job.os}}-${{matrix.py_version}}
+    services:
+      scylla:
+        image: scylladb/scylla:5.2
+        options: >-
+          --health-cmd="cqlsh -e 'select * from system.local' "
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=60
+        ports:
+          - 9042:9042
     strategy:
       matrix:
         py_version: ["3.8", "3.9", "3.10", "3.11"]
         job:
             - os: ubuntu-latest
               ssl_cmd: sudo apt-get update && sudo apt-get install libssl-dev openssl
+            # Uncomment when containerss become available
+            # on these systems.
             # - os: windows-latest
             #   ssl_cmd: vcpkg install openssl:x64-windows-static-md
-            - os: macos-latest
-              ssl_cmd: echo "Already installed"
+            # - os: macos-latest
+            #   ssl_cmd: echo "Already installed"
     runs-on: ${{matrix.job.os}}
     steps:
     - uses: actions/checkout@v1
