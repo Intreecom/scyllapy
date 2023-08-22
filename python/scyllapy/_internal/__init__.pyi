@@ -99,6 +99,10 @@ class Scylla:
 
         It may speed up you application.
         """
+    async def use_keyspace(self, keyspace: str) -> None:
+        """Change current keyspace for all connections."""
+    async def get_keyspace(self) -> str | None:
+        """Get current keyspace."""
 
 class QueryResult:
     trace_id: str | None
