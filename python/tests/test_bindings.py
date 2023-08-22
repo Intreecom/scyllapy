@@ -1,5 +1,6 @@
 import datetime
 import ipaddress
+import random
 from typing import Any, Callable
 import uuid
 import pytest
@@ -78,3 +79,23 @@ async def test_collections(
     rows = result.all()
     assert len(rows) == 1
     assert rows[0] == {"id": 1, "coll": cast_func(test_val)}
+
+
+@pytest.mark.anyio
+async def test_named_parameters(scylla: Scylla):
+    table_name = random_string(4)
+    await scylla.execute(
+        f"CREATE TABLE {table_name} (id INT, name TEXT, age INT, PRIMARY KEY (id))"
+    )
+    to_insert = {
+        "id": random.randint(0, 100),
+        "name": random_string(5),
+        "age": random.randint(0, 100),
+    }
+    await scylla.execute(
+        f"INSERT INTO {table_name}(id, name, age) VALUES (:id, :name, :age)",
+        params=to_insert,
+    )
+
+    res = await scylla.execute(f"SELECT * FROM {table_name}")
+    assert res.first() == to_insert

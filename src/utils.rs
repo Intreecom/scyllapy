@@ -4,9 +4,9 @@ use pyo3::{
     types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PySet, PyString, PyTuple},
     IntoPy, Py, PyAny, PyObject, Python, ToPyObject,
 };
-use scylla::{
-    _macro_internal::{CqlValue, Value},
-    frame::response::result::ColumnType,
+use scylla::frame::{
+    response::result::{ColumnType, CqlValue},
+    value::{SerializedValues, Value},
 };
 
 use std::net::IpAddr;
@@ -378,6 +378,52 @@ pub fn cql_to_py<'a>(
             field_types: _,
         } => Err(anyhow::anyhow!("UDT is not yet supported.")),
     }
+}
+
+/// Parse python type to `SerializedValues`.
+///
+/// Serialized values are used for
+/// parameter binding. We parse python types
+/// into our own types that are capable
+/// of being bound to query and add parsed
+/// results to `SerializedValues`.
+///
+/// # Errors
+///
+/// May result in error if any of parameters cannot
+/// be parsed.
+pub fn parse_python_query_params(
+    params: Option<&PyAny>,
+    allow_dicts: bool,
+) -> anyhow::Result<SerializedValues> {
+    let mut values = SerializedValues::new();
+
+    let Some(params) = params else {
+        return Ok(values);
+    };
+
+    // If list was passed, we construct only unnamed parameters.
+    // Otherwise it parses dict to named parameters.
+    if params.is_instance_of::<PyList>() || params.is_instance_of::<PyTuple>() {
+        let params = params.extract::<Vec<&PyAny>>()?;
+        for param in params {
+            values.add_value(&py_to_value(param)?)?;
+        }
+        return Ok(values);
+    } else if params.is_instance_of::<PyDict>() {
+        if allow_dicts {
+            let dict = params.extract::<HashMap<&str, &PyAny>>()?;
+            for (name, value) in dict {
+                values.add_named_value(name, &py_to_value(value)?)?;
+            }
+            return Ok(values);
+        }
+        return Err(anyhow::anyhow!("Dicts are not allowed here."));
+    }
+    let type_name = params.get_type().name()?;
+    Err(anyhow::anyhow!(
+        "Unsupported type for paramter binding: {type_name}. Use list, tuple or dict."
+    ))
 }
 
 /// Map rows, using some python callable.
