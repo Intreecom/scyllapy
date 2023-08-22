@@ -1,18 +1,18 @@
-use std::{sync::Arc, time::Duration};
+use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
 use openssl::{
     ssl::{SslContextBuilder, SslMethod, SslVerifyMode},
     x509::X509,
 };
 use pyo3::{pyclass, pymethods, PyAny, Python};
-use scylla::{_macro_internal::SerializedValues, batch::Batch, query::Query};
+use scylla::{batch::Batch, query::Query};
 
 use crate::{
     batches::ScyllaPyBatch,
     inputs::{ExecuteInput, PrepareInput},
     prepared_queries::ScyllaPyPreparedQuery,
     query_results::ScyllaPyQueryResult,
-    utils::{anyhow_py_future, py_to_value},
+    utils::{anyhow_py_future, parse_python_query_params},
 };
 
 #[pyclass(frozen, weakref)]
@@ -23,6 +23,14 @@ pub struct Scylla {
     keyspace: Option<String>,
     ssl_cert: Option<String>,
     connection_timeout: Option<u64>,
+    write_coalescing: Option<bool>,
+    disallow_shard_aware_port: Option<bool>,
+    pool_size_per_host: Option<NonZeroUsize>,
+    pool_size_per_shard: Option<NonZeroUsize>,
+    keepalive_interval: Option<u64>,
+    keepalive_timeout: Option<u64>,
+    tcp_keepalive_interval: Option<u64>,
+    tcp_nodelay: Option<bool>,
     scylla_session: Arc<tokio::sync::RwLock<Option<scylla::Session>>>,
 }
 
@@ -36,7 +44,16 @@ impl Scylla {
         keyspace = None,
         ssl_cert = None,
         connection_timeout = None,
+        write_coalescing = None,
+        pool_size_per_host = None,
+        pool_size_per_shard = None,
+        keepalive_interval = None,
+        keepalive_timeout= None,
+        tcp_keepalive_interval = None,
+        tcp_nodelay = None,
+        disallow_shard_aware_port = None,
     ))]
+    #[allow(clippy::too_many_arguments)]
     pub fn py_new(
         contact_points: Vec<String>,
         username: Option<String>,
@@ -44,6 +61,14 @@ impl Scylla {
         keyspace: Option<String>,
         ssl_cert: Option<String>,
         connection_timeout: Option<u64>,
+        write_coalescing: Option<bool>,
+        pool_size_per_host: Option<NonZeroUsize>,
+        pool_size_per_shard: Option<NonZeroUsize>,
+        keepalive_interval: Option<u64>,
+        keepalive_timeout: Option<u64>,
+        tcp_keepalive_interval: Option<u64>,
+        tcp_nodelay: Option<bool>,
+        disallow_shard_aware_port: Option<bool>,
     ) -> Self {
         Scylla {
             contact_points,
@@ -52,6 +77,14 @@ impl Scylla {
             ssl_cert,
             keyspace,
             connection_timeout,
+            write_coalescing,
+            disallow_shard_aware_port,
+            pool_size_per_host,
+            pool_size_per_shard,
+            keepalive_interval,
+            keepalive_timeout,
+            tcp_keepalive_interval,
+            tcp_nodelay,
             scylla_session: Arc::new(tokio::sync::RwLock::new(None)),
         }
     }
@@ -83,6 +116,14 @@ impl Scylla {
         let keyspace = self.keyspace.clone();
         let scylla_session = self.scylla_session.clone();
         let conn_timeout = self.connection_timeout;
+        let write_coalescing = self.write_coalescing;
+        let disallow_shard_aware_port = self.disallow_shard_aware_port;
+        let pool_size_per_host = self.pool_size_per_host;
+        let pool_size_per_shard = self.pool_size_per_shard;
+        let keepalive_interval = self.keepalive_interval;
+        let keepalive_timeout = self.keepalive_timeout;
+        let tcp_keepalive_interval = self.tcp_keepalive_interval;
+        let tcp_nodelay = self.tcp_nodelay;
         anyhow_py_future(py, async move {
             if scylla_session.read().await.is_some() {
                 return Err(anyhow::anyhow!("Session already initialized."));
@@ -90,6 +131,33 @@ impl Scylla {
             let mut session_builder = scylla::SessionBuilder::new()
                 .ssl_context(ssl_context)
                 .known_nodes(contact_points);
+            if let Some(write_coalescing) = write_coalescing {
+                session_builder = session_builder.write_coalescing(write_coalescing);
+            }
+            if let Some(disallow) = disallow_shard_aware_port {
+                session_builder = session_builder.disallow_shard_aware_port(disallow);
+            }
+            if let Some(pool_per_host) = pool_size_per_host {
+                session_builder = session_builder
+                    .pool_size(scylla::transport::session::PoolSize::PerHost(pool_per_host));
+            } else if let Some(pool_size_per_shard) = pool_size_per_shard {
+                session_builder = session_builder.pool_size(
+                    scylla::transport::session::PoolSize::PerShard(pool_size_per_shard),
+                );
+            }
+            if let Some(inter) = keepalive_interval {
+                session_builder = session_builder.keepalive_interval(Duration::from_secs(inter));
+            }
+            if let Some(timeout) = keepalive_timeout {
+                session_builder = session_builder.keepalive_timeout(Duration::from_secs(timeout));
+            }
+            if let Some(inter) = tcp_keepalive_interval {
+                session_builder =
+                    session_builder.tcp_keepalive_interval(Duration::from_secs(inter));
+            }
+            if let Some(tcp_nodelay) = tcp_nodelay {
+                session_builder = session_builder.tcp_nodelay(tcp_nodelay);
+            }
             match (username, password) {
                 (Some(user), Some(pass)) => session_builder = session_builder.user(user, pass),
                 (None, None) => {}
@@ -148,18 +216,11 @@ impl Scylla {
         &'a self,
         py: Python<'a>,
         query: ExecuteInput,
-        params: Option<Vec<&'a PyAny>>,
+        params: Option<&'a PyAny>,
     ) -> anyhow::Result<&'a PyAny> {
         // We need to prepare parameter we're going to use
         // in query.
-        let mut query_params = SerializedValues::new();
-        // If parameters were passed, we parse python values,
-        // to corresponding CQL values.
-        if let Some(passed_params) = params {
-            for param in passed_params {
-                query_params.add_value(&py_to_value(param)?)?;
-            }
-        }
+        let query_params = parse_python_query_params(params, true)?;
         // We need this clone, to safely share the session between threads.
         let session_arc = self.scylla_session.clone();
         anyhow_py_future(py, async move {
@@ -197,11 +258,7 @@ impl Scylla {
         // to corresponding CQL values.
         if let Some(passed_params) = params {
             for query_params in passed_params {
-                let mut query_serialized = SerializedValues::new();
-                for param in query_params.iter()? {
-                    query_serialized.add_value(&py_to_value(param?)?)?;
-                }
-                batch_params.push(query_serialized);
+                batch_params.push(parse_python_query_params(Some(query_params), false)?);
             }
         }
         let batch = Batch::from(batch);
