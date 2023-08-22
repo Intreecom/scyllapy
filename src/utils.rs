@@ -367,7 +367,7 @@ pub fn cql_to_py<'a>(
             Ok(py
                 .import("datetime")?
                 .getattr("time")?
-                .call_method1("fromisoformat", (time.format("%H:%M:%S.%f").to_string(),))?)
+                .call_method1("fromisoformat", (time.format("%H:%M:%S%.6f").to_string(),))?)
         }
         ColumnType::Custom(_) => Err(anyhow::anyhow!("Custom types are not yet supported.")),
         ColumnType::Varint => Err(anyhow::anyhow!("Variant is not yet supported.")),
