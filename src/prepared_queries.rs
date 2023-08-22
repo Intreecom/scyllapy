@@ -1,20 +1,20 @@
 use pyo3::pyclass;
 use scylla::prepared_statement::PreparedStatement;
 
-#[pyclass]
+#[pyclass(name = "PreparedQuery")]
 #[derive(Clone, Debug)]
-pub struct PreparedQuery {
+pub struct ScyllaPyPreparedQuery {
     inner: PreparedStatement,
 }
 
-impl From<PreparedStatement> for PreparedQuery {
+impl From<PreparedStatement> for ScyllaPyPreparedQuery {
     fn from(value: PreparedStatement) -> Self {
         Self { inner: value }
     }
 }
 
-impl From<PreparedQuery> for PreparedStatement {
-    fn from(value: PreparedQuery) -> Self {
+impl From<ScyllaPyPreparedQuery> for PreparedStatement {
+    fn from(value: ScyllaPyPreparedQuery) -> Self {
         value.inner
     }
 }

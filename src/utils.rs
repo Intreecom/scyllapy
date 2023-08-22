@@ -1,4 +1,4 @@
-use std::future::Future;
+use std::{collections::HashMap, future::Future, str::FromStr};
 
 use pyo3::{
     types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PySet, PyString, PyTuple},
@@ -8,6 +8,10 @@ use scylla::{
     _macro_internal::{CqlValue, Value},
     frame::response::result::ColumnType,
 };
+
+use std::net::IpAddr;
+
+use crate::extra_types::{BigInt, Counter, Double, SmallInt, TinyInt};
 
 /// Small function to integrate anyhow result
 /// and `pyo3_asyncio`.
@@ -29,44 +33,150 @@ where
     Ok(res)
 }
 
-/// Convert python type to CQL value.
+/// This class is used to transfer
+/// data between python and rust.
 ///
-/// This function is used to convert parameters, passed from
-/// python to convinient `CQLValue` type. All these values are
-/// going to be used in parameter bindings for query.
+/// This enum implements Value interface,
+/// and any of it's variants can
+/// be bound to query.
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub enum ScyllaPyCQLDTO {
+    String(String),
+    BigInt(i64),
+    Int(i32),
+    SmallInt(i16),
+    TinyInt(i8),
+    Counter(i64),
+    Bool(bool),
+    Double(eq_float::F64),
+    Float(eq_float::F32),
+    Bytes(Vec<u8>),
+    Date(chrono::NaiveDate),
+    Time(chrono::Duration),
+    Uuid(uuid::Uuid),
+    Inet(IpAddr),
+    List(Vec<ScyllaPyCQLDTO>),
+    Map(Vec<(ScyllaPyCQLDTO, ScyllaPyCQLDTO)>),
+}
+
+impl Value for ScyllaPyCQLDTO {
+    fn serialize(&self, buf: &mut Vec<u8>) -> Result<(), scylla::_macro_internal::ValueTooBig> {
+        match self {
+            ScyllaPyCQLDTO::String(string) => string.serialize(buf),
+            ScyllaPyCQLDTO::BigInt(bigint) => bigint.serialize(buf),
+            ScyllaPyCQLDTO::Int(int) => int.serialize(buf),
+            ScyllaPyCQLDTO::SmallInt(smallint) => smallint.serialize(buf),
+            ScyllaPyCQLDTO::Bool(blob) => blob.serialize(buf),
+            ScyllaPyCQLDTO::Double(double) => double.0.serialize(buf),
+            ScyllaPyCQLDTO::Float(float) => float.0.serialize(buf),
+            ScyllaPyCQLDTO::Bytes(bytes) => bytes.serialize(buf),
+            ScyllaPyCQLDTO::Uuid(uuid) => uuid.serialize(buf),
+            ScyllaPyCQLDTO::Inet(inet) => inet.serialize(buf),
+            ScyllaPyCQLDTO::List(list) => list.serialize(buf),
+            ScyllaPyCQLDTO::Counter(counter) => counter.serialize(buf),
+            ScyllaPyCQLDTO::TinyInt(tinyint) => tinyint.serialize(buf),
+            ScyllaPyCQLDTO::Date(date) => date.serialize(buf),
+            ScyllaPyCQLDTO::Time(time) => scylla::frame::value::Time(*time).serialize(buf),
+            ScyllaPyCQLDTO::Map(map) => map
+                .iter()
+                .cloned()
+                .collect::<HashMap<_, _>>()
+                .serialize(buf),
+        }
+    }
+}
+
+/// Convert Python type to CQL parameter value.
+///
+/// It converts python object to another type,
+/// which can be serialized as Value that can
+/// be bound to `Query`.
 ///
 /// # Errors
-/// It can raise an error if type cannot be extracted,
-/// or if type is unsupported.
-pub fn py_to_cql_value(item: &PyAny) -> anyhow::Result<Box<dyn Value + Send + Sync>> {
+///
+/// May raise an error, if
+/// value cannot be converted or unnown type was passed.
+pub fn py_to_value(item: &PyAny) -> anyhow::Result<ScyllaPyCQLDTO> {
     if item.is_instance_of::<PyString>() {
-        return Ok(Box::new(item.extract::<String>()?));
+        Ok(ScyllaPyCQLDTO::String(item.extract::<String>()?))
+    } else if item.is_instance_of::<PyBool>() {
+        Ok(ScyllaPyCQLDTO::Bool(item.extract::<bool>()?))
+    } else if item.is_instance_of::<PyInt>() {
+        Ok(ScyllaPyCQLDTO::Int(item.extract::<i32>()?))
+    } else if item.is_instance_of::<PyFloat>() {
+        Ok(ScyllaPyCQLDTO::Float(eq_float::F32(item.extract::<f32>()?)))
+    } else if item.is_instance_of::<SmallInt>() {
+        Ok(ScyllaPyCQLDTO::SmallInt(
+            item.extract::<SmallInt>()?.get_value(),
+        ))
+    } else if item.is_instance_of::<TinyInt>() {
+        Ok(ScyllaPyCQLDTO::TinyInt(
+            item.extract::<TinyInt>()?.get_value(),
+        ))
+    } else if item.is_instance_of::<BigInt>() {
+        Ok(ScyllaPyCQLDTO::BigInt(
+            item.extract::<BigInt>()?.get_value(),
+        ))
+    } else if item.is_instance_of::<Double>() {
+        Ok(ScyllaPyCQLDTO::Double(eq_float::F64(
+            item.extract::<Double>()?.get_value(),
+        )))
+    } else if item.is_instance_of::<Counter>() {
+        Ok(ScyllaPyCQLDTO::Counter(
+            item.extract::<Counter>()?.get_value(),
+        ))
+    } else if item.is_instance_of::<PyBytes>() {
+        Ok(ScyllaPyCQLDTO::Bytes(item.extract::<Vec<u8>>()?))
+    } else if item.get_type().name()? == "UUID" {
+        Ok(ScyllaPyCQLDTO::Uuid(uuid::Uuid::parse_str(
+            item.str()?.extract::<&str>()?,
+        )?))
+    } else if item.get_type().name()? == "IPv4Address" || item.get_type().name()? == "IPv6Address" {
+        Ok(ScyllaPyCQLDTO::Inet(IpAddr::from_str(
+            item.str()?.extract::<&str>()?,
+        )?))
+    } else if item.get_type().name()? == "date" {
+        Ok(ScyllaPyCQLDTO::Date(chrono::NaiveDate::from_str(
+            item.call_method0("isoformat")?.extract::<&str>()?,
+        )?))
+    } else if item.get_type().name()? == "time" {
+        Ok(ScyllaPyCQLDTO::Time(
+            chrono::NaiveTime::from_str(item.call_method0("isoformat")?.extract::<&str>()?)?
+                .signed_duration_since(
+                    chrono::NaiveTime::from_num_seconds_from_midnight_opt(0, 0)
+                        .ok_or(anyhow::anyhow!("Cannot calculate offset from midnight."))?,
+                ),
+        ))
     } else if item.is_instance_of::<PyList>()
-        || item.is_exact_instance_of::<PyTuple>()
-        || item.is_exact_instance_of::<PySet>()
+        || item.is_instance_of::<PyTuple>()
+        || item.is_instance_of::<PySet>()
     {
         let mut items = Vec::new();
         for inner in item.iter()? {
-            items.push(py_to_cql_value(inner?)?);
+            items.push(py_to_value(inner?)?);
         }
-        return Ok(Box::new(items));
-    } else if item.is_instance_of::<PyInt>() {
-        return Ok(Box::new(item.extract::<i64>()?));
-    } else if item.is_instance_of::<PyBool>() {
-        return Ok(Box::new(item.extract::<bool>()?));
-    } else if item.is_instance_of::<PyFloat>() {
-        return Ok(Box::new(item.extract::<f64>()?));
-    } else if item.is_instance_of::<PyBytes>() {
-        return Ok(Box::new(item.extract::<Vec<u8>>()?));
-    } else if item.get_type().name()? == "UUID" {
-        return Ok(Box::new(uuid::Uuid::parse_str(
-            item.str()?.extract::<&str>()?,
-        )?));
+        Ok(ScyllaPyCQLDTO::List(items))
+    } else if item.is_instance_of::<PyDict>() {
+        let dict = item
+            .downcast::<PyDict>()
+            .map_err(|err| anyhow::anyhow!("Cannot cast to dict: {err}"))?;
+        let mut items = Vec::new();
+        for dict_item in dict.items().iter() {
+            let item_tuple = dict_item
+                .downcast::<PyTuple>()
+                .map_err(|err| anyhow::anyhow!("Cannot cast to tuple: {err}"))?;
+            items.push((
+                py_to_value(item_tuple.get_item(0)?)?,
+                py_to_value(item_tuple.get_item(1)?)?,
+            ));
+        }
+        Ok(ScyllaPyCQLDTO::Map(items))
+    } else {
+        let type_name = item.get_type().name()?;
+        Err(anyhow::anyhow!(
+            "Unsupported type for parameter binding: {type_name:?}"
+        ))
     }
-    let name = item.get_type();
-    Err(anyhow::anyhow!(
-        "Unsupported type for parameter binding: {name}"
-    ))
 }
 
 /// Convert CQL type from database to Python.
@@ -93,7 +203,6 @@ pub fn cql_to_py<'a>(
     let Some(unwrapped_value) = cql_value else{
         return Ok(py.None().into_ref(py));
     };
-
     match cql_type {
         ColumnType::Ascii => unwrapped_value
             .as_ascii()
@@ -181,16 +290,87 @@ pub fn cql_to_py<'a>(
                 .to_string();
             Ok(py.import("uuid")?.getattr("UUID")?.call1((uuid_str,))?)
         }
+        ColumnType::Timeuuid => {
+            let uuid_str = unwrapped_value
+                .as_timeuuid()
+                .ok_or(anyhow::anyhow!("Cannot parse timeuuid"))?
+                .as_simple()
+                .to_string();
+            Ok(py.import("uuid")?.getattr("UUID")?.call1((uuid_str,))?)
+        }
+        ColumnType::Duration => {
+            // We loose some perscision on converting it to
+            // python datetime, because in scylla,
+            // durations is stored in nanoseconds.
+            // But that's ok, because we assume that
+            // all values were inserted using
+            // same driver. Will fix it on demand.
+            let duration = unwrapped_value
+                .as_duration()
+                .ok_or(anyhow::anyhow!("Cannot parse duration"))?;
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("microseconds", duration.num_microseconds())?;
+            Ok(py
+                .import("datetime")?
+                .getattr("timedelta")?
+                .call((), Some(kwargs))?)
+        }
+        ColumnType::Timestamp => {
+            // Timestamp - num of milliseconds since unix epoch.
+            Ok(unwrapped_value
+                .as_duration()
+                .ok_or(anyhow::anyhow!("Cannot parse timestamp"))?
+                .num_milliseconds()
+                .to_object(py)
+                .into_ref(py))
+        }
+        ColumnType::Inet => Ok(unwrapped_value
+            .as_inet()
+            .ok_or(anyhow::anyhow!("Cannot parse inet addres"))?
+            .to_object(py)
+            .into_ref(py)),
+        ColumnType::Date => {
+            let formatted_date = unwrapped_value
+                .as_date()
+                .ok_or(anyhow::anyhow!("Cannot parse date"))?
+                .format("%Y-%m-%d")
+                .to_string();
+            Ok(py
+                .import("datetime")?
+                .getattr("date")?
+                .call_method1("fromisoformat", (formatted_date,))?)
+        }
+        ColumnType::Tuple(types) => {
+            if let CqlValue::Tuple(data) = unwrapped_value {
+                let mut dumped_elemets = Vec::new();
+                for (col_type, col_val) in types.iter().zip(data) {
+                    dumped_elemets.push(cql_to_py(py, col_type, col_val.as_ref())?);
+                }
+                Ok(PyTuple::new(py, dumped_elemets))
+            } else {
+                Err(anyhow::anyhow!("Cannot parse as tuple."))
+            }
+        }
+        ColumnType::Counter => Ok(unwrapped_value
+            .as_counter()
+            .ok_or(anyhow::anyhow!("Cannot parse counter"))?
+            .0
+            .to_object(py)
+            .into_ref(py)),
+        ColumnType::Time => {
+            let duration = unwrapped_value
+                .as_duration()
+                .ok_or(anyhow::anyhow!("Cannot parse time"))?;
+            let time = chrono::NaiveTime::from_num_seconds_from_midnight_opt(0, 0)
+                .ok_or(anyhow::anyhow!("Cannot calculate midnight time"))?
+                + duration;
+            Ok(py
+                .import("datetime")?
+                .getattr("time")?
+                .call_method1("fromisoformat", (time.format("%H:%M:%S%.6f").to_string(),))?)
+        }
         ColumnType::Custom(_) => Err(anyhow::anyhow!("Custom types are not yet supported.")),
-        ColumnType::Counter => Err(anyhow::anyhow!("Counter is not yet supported.")),
         ColumnType::Varint => Err(anyhow::anyhow!("Variant is not yet supported.")),
-        ColumnType::Time => Err(anyhow::anyhow!("Time is not yet supported.")),
-        ColumnType::Timestamp => Err(anyhow::anyhow!("Timestamp is not yet supported.")),
-        ColumnType::Inet => Err(anyhow::anyhow!("Inet is not yet supported.")),
-        ColumnType::Date => Err(anyhow::anyhow!("Date is not yet supported.")),
-        ColumnType::Duration => Err(anyhow::anyhow!("Duration is not yet supported.")),
-        ColumnType::Timeuuid => Err(anyhow::anyhow!("TimeUUID is not yet supported.")),
-        ColumnType::Tuple(_) => Err(anyhow::anyhow!("Tuple is not yet supported.")),
         ColumnType::Decimal => Err(anyhow::anyhow!("Decimals are not yet supported.")),
         ColumnType::UserDefinedType {
             type_name: _,

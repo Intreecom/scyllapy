@@ -1,0 +1,76 @@
+name: 'Testing package'
+
+on:
+  pull_request:
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        components: rustfmt
+        override: true
+    - name: Check code format
+      run: cargo fmt -- --check --config use_try_shorthand=true,imports_granularity=Crate
+
+  clippy:
+    permissions:
+      checks: write
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        components: clippy
+        override: true
+    - uses: actions-rs/clippy-check@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        args: -p scyllapy --all-features -- -W clippy::all -W clippy::pedantic -D warnings
+  pytest:
+    name: ${{matrix.job.os}}-${{matrix.py_version}}
+    services:
+      scylla:
+        image: scylladb/scylla:5.2
+        options: >-
+          --health-cmd="cqlsh -e 'select * from system.local' "
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=60
+        ports:
+          - 9042:9042
+    strategy:
+      matrix:
+        py_version: ["3.8", "3.9", "3.10", "3.11"]
+        job:
+            - os: ubuntu-latest
+              ssl_cmd: sudo apt-get update && sudo apt-get install libssl-dev openssl
+            # Uncomment when containerss become available
+            # on these systems.
+            # - os: windows-latest
+            #   ssl_cmd: vcpkg install openssl:x64-windows-static-md
+            # - os: macos-latest
+            #   ssl_cmd: echo "Already installed"
+    runs-on: ${{matrix.job.os}}
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        components: clippy
+        override: true
+    - name: Setup OpenSSL
+      run: ${{matrix.job.ssl_cmd}}
+    - name: Setup python for test ${{ matrix.py_version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.py_version }}
+    - name: Install tox
+      run: pip install "tox-gh>=1.2,<2"
+    - name: Run pytest
+      run: tox -v
+

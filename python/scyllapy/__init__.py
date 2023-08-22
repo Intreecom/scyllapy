@@ -6,6 +6,7 @@ from ._internal import (
     PreparedQuery,
     Batch,
     BatchType,
+    extra_types,
 )
 from importlib.metadata import version
 
@@ -20,4 +21,5 @@ __all__ = [
     "PreparedQuery",
     "Batch",
     "BatchType",
+    "extra_types",
 ]
