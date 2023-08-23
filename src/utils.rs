@@ -40,7 +40,7 @@ where
 /// This enum implements Value interface,
 /// and any of it's variants can
 /// be bound to query.
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub enum ScyllaPyCQLDTO {
     Null,
     Unset,
@@ -432,7 +432,8 @@ pub fn parse_python_query_params(
     if params.is_instance_of::<PyList>() || params.is_instance_of::<PyTuple>() {
         let params = params.extract::<Vec<&PyAny>>()?;
         for param in params {
-            values.add_value(&py_to_value(param)?)?;
+            let py_dto = py_to_value(param)?;
+            values.add_value(&py_dto)?;
         }
         return Ok(values);
     } else if params.is_instance_of::<PyDict>() {
