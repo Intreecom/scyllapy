@@ -115,6 +115,14 @@ async def insert(scylla: Scylla):
     )
 ```
 
+Important note: All variables should be in snake_case.
+Otherwise the error may be raised or parameter may not be placed in query correctly.
+This happens, because scylla makes all parameters in query lowercase.
+
+The scyllapy makes all parameters lowercase, but you may run into problems,
+if you use multiple parameters that differ only in cases of some letters.
+
+
 ## Preparing queries
 
 Also, queries can be prepared. You can either prepare raw strings, or `Query` objects.

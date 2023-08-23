@@ -37,6 +37,19 @@ simple_wrapper!(BigInt, i64);
 simple_wrapper!(Double, f64);
 simple_wrapper!(Counter, i64);
 
+#[pyclass(name = "Unset")]
+#[derive(Clone, Copy)]
+pub struct ScyllaPyUnset {}
+
+#[pymethods]
+impl ScyllaPyUnset {
+    #[new]
+    #[must_use]
+    pub fn py_new() -> Self {
+        Self {}
+    }
+}
+
 /// Create new module for extra types.
 ///
 /// # Errors
@@ -50,5 +63,6 @@ pub fn add_module<'a>(py: Python<'a>, name: &'static str) -> PyResult<&'a PyModu
     module.add_class::<BigInt>()?;
     module.add_class::<Double>()?;
     module.add_class::<Counter>()?;
+    module.add_class::<ScyllaPyUnset>()?;
     Ok(module)
 }

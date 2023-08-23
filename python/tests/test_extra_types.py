@@ -54,3 +54,13 @@ async def test_counter(scylla: Scylla) -> None:
     rows = res.all()
     assert len(rows) == 1
     assert rows[0] == {"id": 1, "count": 1}
+
+
+@pytest.mark.anyio
+async def test_unset(scylla: Scylla) -> None:
+    table_name = random_string(4)
+    await scylla.execute(f"CREATE TABLE {table_name} (id INT PRIMARY KEY, name TEXT)")
+
+    await scylla.execute(
+        f"INSERT INTO {table_name}(id, name) VALUES (?, ?)", [1, extra_types.Unset()]
+    )

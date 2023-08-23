@@ -12,7 +12,7 @@ use scylla::frame::{
 
 use std::net::IpAddr;
 
-use crate::extra_types::{BigInt, Counter, Double, SmallInt, TinyInt};
+use crate::extra_types::{BigInt, Counter, Double, ScyllaPyUnset, SmallInt, TinyInt};
 
 /// Small function to integrate anyhow result
 /// and `pyo3_asyncio`.
@@ -40,8 +40,10 @@ where
 /// This enum implements Value interface,
 /// and any of it's variants can
 /// be bound to query.
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub enum ScyllaPyCQLDTO {
+    Null,
+    Unset,
     String(String),
     BigInt(i64),
     Int(i32),
@@ -87,6 +89,8 @@ impl Value for ScyllaPyCQLDTO {
             ScyllaPyCQLDTO::Timestamp(timestamp) => {
                 scylla::frame::value::Timestamp(*timestamp).serialize(buf)
             }
+            ScyllaPyCQLDTO::Null => Option::<i16>::None.serialize(buf),
+            ScyllaPyCQLDTO::Unset => scylla::frame::value::Unset.serialize(buf),
         }
     }
 }
@@ -102,8 +106,12 @@ impl Value for ScyllaPyCQLDTO {
 /// May raise an error, if
 /// value cannot be converted or unnown type was passed.
 pub fn py_to_value(item: &PyAny) -> anyhow::Result<ScyllaPyCQLDTO> {
-    if item.is_instance_of::<PyString>() {
+    if item.is_none() {
+        Ok(ScyllaPyCQLDTO::Null)
+    } else if item.is_instance_of::<PyString>() {
         Ok(ScyllaPyCQLDTO::String(item.extract::<String>()?))
+    } else if item.is_instance_of::<ScyllaPyUnset>() {
+        Ok(ScyllaPyCQLDTO::Unset)
     } else if item.is_instance_of::<PyBool>() {
         Ok(ScyllaPyCQLDTO::Bool(item.extract::<bool>()?))
     } else if item.is_instance_of::<PyInt>() {
@@ -424,14 +432,15 @@ pub fn parse_python_query_params(
     if params.is_instance_of::<PyList>() || params.is_instance_of::<PyTuple>() {
         let params = params.extract::<Vec<&PyAny>>()?;
         for param in params {
-            values.add_value(&py_to_value(param)?)?;
+            let py_dto = py_to_value(param)?;
+            values.add_value(&py_dto)?;
         }
         return Ok(values);
     } else if params.is_instance_of::<PyDict>() {
         if allow_dicts {
             let dict = params.extract::<HashMap<&str, &PyAny>>()?;
             for (name, value) in dict {
-                values.add_named_value(name, &py_to_value(value)?)?;
+                values.add_named_value(name.to_lowercase().as_str(), &py_to_value(value)?)?;
             }
             return Ok(values);
         }
