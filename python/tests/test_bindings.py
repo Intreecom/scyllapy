@@ -100,6 +100,7 @@ async def test_named_parameters(scylla: Scylla):
     res = await scylla.execute(f"SELECT * FROM {table_name}")
     assert res.first() == to_insert
 
+
 @pytest.mark.anyio
 async def test_timestamps(scylla: Scylla) -> None:
     table_name = random_string(4)
@@ -115,3 +116,12 @@ async def test_timestamps(scylla: Scylla) -> None:
 
     res = await scylla.execute(f"SELECT time FROM {table_name}")
     assert res.scalar() == now
+
+
+@pytest.mark.anyio
+async def test_none_vals(scylla: Scylla):
+    table_name = random_string(4)
+    await scylla.execute(f"CREATE TABLE {table_name} (id INT PRIMARY KEY, name TEXT)")
+    await scylla.execute(f"INSERT INTO {table_name}(id, name) VALUES (?, ?)", [1, None])
+    results = await scylla.execute(f"SELECT * FROM {table_name}")
+    assert results.first() == {"id": 1, "name": None}
