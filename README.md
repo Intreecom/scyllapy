@@ -21,6 +21,21 @@ maturin build --release --out dist
 pip install dist/*
 ```
 
+## For Alpine users
+
+The binaries for `linux-musl` target are not yet ready. But you can easily build
+the whl file by yourself.
+
+```bash
+apk add musl-dev libressl-dev rust cargo
+export X86_64_ALPINE_LINUX_MUSL_OPENSSL_NO_VENDOR=1
+
+pip install scyllapy
+
+# Or you can build wheel to install it later.
+pip wheel scyllapy
+```
+
 ## Usage
 
 The usage is pretty straitforward. Create a Scylla instance, run startup and start executing queries.
