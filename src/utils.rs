@@ -42,6 +42,7 @@ where
 /// be bound to query.
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub enum ScyllaPyCQLDTO {
+    Null,
     String(String),
     BigInt(i64),
     Int(i32),
@@ -87,6 +88,7 @@ impl Value for ScyllaPyCQLDTO {
             ScyllaPyCQLDTO::Timestamp(timestamp) => {
                 scylla::frame::value::Timestamp(*timestamp).serialize(buf)
             }
+            ScyllaPyCQLDTO::Null => Option::<i16>::None.serialize(buf),
         }
     }
 }
@@ -102,7 +104,9 @@ impl Value for ScyllaPyCQLDTO {
 /// May raise an error, if
 /// value cannot be converted or unnown type was passed.
 pub fn py_to_value(item: &PyAny) -> anyhow::Result<ScyllaPyCQLDTO> {
-    if item.is_instance_of::<PyString>() {
+    if item.is_none() {
+        Ok(ScyllaPyCQLDTO::Null)
+    } else if item.is_instance_of::<PyString>() {
         Ok(ScyllaPyCQLDTO::String(item.extract::<String>()?))
     } else if item.is_instance_of::<PyBool>() {
         Ok(ScyllaPyCQLDTO::Bool(item.extract::<bool>()?))
