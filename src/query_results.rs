@@ -110,7 +110,7 @@ impl ScyllaPyQueryResult {
             return Err(anyhow::anyhow!("The query doesn't have returns ."));
         };
         if rows.is_empty() {
-            return Ok(None);
+            return Ok(Some(rows.to_object(py)));
         }
         let Some(col_name) = self.inner.col_specs.first() else{
             return Err(anyhow::anyhow!("Cannot find any columns"));
