@@ -1,5 +1,6 @@
 use std::{collections::HashMap, future::Future, str::FromStr};
 
+use chrono::Duration;
 use pyo3::{
     types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PySet, PyString, PyTuple},
     IntoPy, Py, PyAny, PyObject, Python, ToPyObject,
@@ -53,6 +54,7 @@ pub enum ScyllaPyCQLDTO {
     Bytes(Vec<u8>),
     Date(chrono::NaiveDate),
     Time(chrono::Duration),
+    Timestamp(chrono::Duration),
     Uuid(uuid::Uuid),
     Inet(IpAddr),
     List(Vec<ScyllaPyCQLDTO>),
@@ -82,6 +84,9 @@ impl Value for ScyllaPyCQLDTO {
                 .cloned()
                 .collect::<HashMap<_, _>>()
                 .serialize(buf),
+            ScyllaPyCQLDTO::Timestamp(timestamp) => {
+                scylla::frame::value::Timestamp(*timestamp).serialize(buf)
+            }
         }
     }
 }
@@ -147,6 +152,11 @@ pub fn py_to_value(item: &PyAny) -> anyhow::Result<ScyllaPyCQLDTO> {
                         .ok_or(anyhow::anyhow!("Cannot calculate offset from midnight."))?,
                 ),
         ))
+    } else if item.get_type().name()? == "datetime" {
+        let milliseconds = item.call_method0("timestamp")?.extract::<f64>()? * 1000f64;
+        #[allow(clippy::cast_possible_truncation)]
+        let timestamp = Duration::milliseconds(milliseconds.trunc() as i64);
+        Ok(ScyllaPyCQLDTO::Timestamp(timestamp))
     } else if item.is_instance_of::<PyList>()
         || item.is_instance_of::<PyTuple>()
         || item.is_instance_of::<PySet>()
@@ -317,12 +327,19 @@ pub fn cql_to_py<'a>(
         }
         ColumnType::Timestamp => {
             // Timestamp - num of milliseconds since unix epoch.
-            Ok(unwrapped_value
+            let timestamp = unwrapped_value
                 .as_duration()
-                .ok_or(anyhow::anyhow!("Cannot parse timestamp"))?
-                .num_milliseconds()
-                .to_object(py)
-                .into_ref(py))
+                .ok_or(anyhow::anyhow!("Cannot parse timestamp"))?;
+            #[allow(clippy::cast_precision_loss)]
+            let seconds = timestamp.num_seconds() as f64;
+            #[allow(clippy::cast_precision_loss)]
+            let micros = (timestamp - Duration::seconds(timestamp.num_seconds())).num_milliseconds()
+                as f64
+                / 1_000f64; // Converting microseconds to seconds to construct timestamp
+            Ok(py
+                .import("datetime")?
+                .getattr("datetime")?
+                .call_method1("fromtimestamp", (seconds + micros,))?)
         }
         ColumnType::Inet => Ok(unwrapped_value
             .as_inet()

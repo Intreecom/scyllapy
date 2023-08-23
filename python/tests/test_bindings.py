@@ -99,3 +99,19 @@ async def test_named_parameters(scylla: Scylla):
 
     res = await scylla.execute(f"SELECT * FROM {table_name}")
     assert res.first() == to_insert
+
+@pytest.mark.anyio
+async def test_timestamps(scylla: Scylla) -> None:
+    table_name = random_string(4)
+    now = datetime.datetime.now()
+    # We do replace this, because scylla ony has millisecond percision.
+    now = now.replace(microsecond=now.microsecond - (now.microsecond % 1000))
+    await scylla.execute(
+        f"CREATE TABLE {table_name} (id INT, time TIMESTAMP, PRIMARY KEY (id))"
+    )
+    insert_query = f"INSERT INTO {table_name}(id, time) VALUES (?, ?)"
+
+    await scylla.execute(insert_query, [1, now])
+
+    res = await scylla.execute(f"SELECT time FROM {table_name}")
+    assert res.scalar() == now
