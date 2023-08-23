@@ -12,7 +12,7 @@ use scylla::frame::{
 
 use std::net::IpAddr;
 
-use crate::extra_types::{BigInt, Counter, Double, SmallInt, TinyInt};
+use crate::extra_types::{BigInt, Counter, Double, ScyllaPyUnset, SmallInt, TinyInt};
 
 /// Small function to integrate anyhow result
 /// and `pyo3_asyncio`.
@@ -43,6 +43,7 @@ where
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub enum ScyllaPyCQLDTO {
     Null,
+    Unset,
     String(String),
     BigInt(i64),
     Int(i32),
@@ -89,6 +90,7 @@ impl Value for ScyllaPyCQLDTO {
                 scylla::frame::value::Timestamp(*timestamp).serialize(buf)
             }
             ScyllaPyCQLDTO::Null => Option::<i16>::None.serialize(buf),
+            ScyllaPyCQLDTO::Unset => scylla::frame::value::Unset.serialize(buf),
         }
     }
 }
@@ -108,6 +110,8 @@ pub fn py_to_value(item: &PyAny) -> anyhow::Result<ScyllaPyCQLDTO> {
         Ok(ScyllaPyCQLDTO::Null)
     } else if item.is_instance_of::<PyString>() {
         Ok(ScyllaPyCQLDTO::String(item.extract::<String>()?))
+    } else if item.is_instance_of::<ScyllaPyUnset>() {
+        Ok(ScyllaPyCQLDTO::Unset)
     } else if item.is_instance_of::<PyBool>() {
         Ok(ScyllaPyCQLDTO::Bool(item.extract::<bool>()?))
     } else if item.is_instance_of::<PyInt>() {
