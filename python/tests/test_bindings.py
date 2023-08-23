@@ -82,7 +82,7 @@ async def test_collections(
 
 
 @pytest.mark.anyio
-async def test_named_parameters(scylla: Scylla):
+async def test_named_parameters(scylla: Scylla) -> None:
     table_name = random_string(4)
     await scylla.execute(
         f"CREATE TABLE {table_name} (id INT, name TEXT, age INT, PRIMARY KEY (id))"
@@ -119,9 +119,19 @@ async def test_timestamps(scylla: Scylla) -> None:
 
 
 @pytest.mark.anyio
-async def test_none_vals(scylla: Scylla):
+async def test_none_vals(scylla: Scylla) -> None:
     table_name = random_string(4)
     await scylla.execute(f"CREATE TABLE {table_name} (id INT PRIMARY KEY, name TEXT)")
     await scylla.execute(f"INSERT INTO {table_name}(id, name) VALUES (?, ?)", [1, None])
     results = await scylla.execute(f"SELECT * FROM {table_name}")
     assert results.first() == {"id": 1, "name": None}
+
+
+@pytest.mark.anyio
+async def test_cases(scylla: Scylla) -> None:
+    table_name = random_string(4)
+    await scylla.execute(f"CREATE TABLE {table_name} (id INT PRIMARY KEY, name TEXT)")
+    await scylla.execute(
+        f"INSERT INTO {table_name}(id, name) VALUES (:Id, :NaMe)",
+        {"Id": 1, "NaMe": 2},
+    )

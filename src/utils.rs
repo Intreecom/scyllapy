@@ -435,7 +435,7 @@ pub fn parse_python_query_params(
         if allow_dicts {
             let dict = params.extract::<HashMap<&str, &PyAny>>()?;
             for (name, value) in dict {
-                values.add_named_value(name, &py_to_value(value)?)?;
+                values.add_named_value(name.to_lowercase().as_str(), &py_to_value(value)?)?;
             }
             return Ok(values);
         }
