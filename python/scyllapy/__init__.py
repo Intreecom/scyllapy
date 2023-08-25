@@ -7,6 +7,7 @@ from ._internal import (
     Batch,
     BatchType,
     extra_types,
+    query_builder,
 )
 from importlib.metadata import version
 
@@ -22,4 +23,5 @@ __all__ = [
     "Batch",
     "BatchType",
     "extra_types",
+    "query_builder",
 ]

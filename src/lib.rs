@@ -4,6 +4,7 @@ pub mod extra_types;
 pub mod inputs;
 pub mod prepared_queries;
 pub mod queries;
+pub mod query_builder;
 pub mod query_results;
 pub mod scylla_cls;
 pub mod utils;
@@ -23,5 +24,6 @@ fn _internal(py: Python<'_>, pymod: &PyModule) -> PyResult<()> {
     pymod.add_class::<batches::ScyllaPyBatchType>()?;
     pymod.add_class::<query_results::ScyllaPyQueryResult>()?;
     pymod.add_submodule(extra_types::add_module(py, "extra_types")?)?;
+    pymod.add_submodule(query_builder::add_module(py, "query_builder")?)?;
     Ok(())
 }

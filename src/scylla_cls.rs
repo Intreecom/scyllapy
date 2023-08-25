@@ -16,6 +16,7 @@ use crate::{
 };
 
 #[pyclass(frozen, weakref)]
+#[derive(Clone)]
 pub struct Scylla {
     contact_points: Vec<String>,
     username: Option<String>,

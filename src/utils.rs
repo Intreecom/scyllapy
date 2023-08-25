@@ -218,7 +218,7 @@ pub fn cql_to_py<'a>(
     cql_type: &'a ColumnType,
     cql_value: Option<&CqlValue>,
 ) -> anyhow::Result<&'a PyAny> {
-    let Some(unwrapped_value) = cql_value else{
+    let Some(unwrapped_value) = cql_value else {
         return Ok(py.None().into_ref(py));
     };
     match cql_type {
