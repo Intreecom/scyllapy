@@ -179,7 +179,7 @@ pub fn py_to_value(item: &PyAny) -> anyhow::Result<ScyllaPyCQLDTO> {
             .downcast::<PyDict>()
             .map_err(|err| anyhow::anyhow!("Cannot cast to dict: {err}"))?;
         let mut items = Vec::new();
-        for dict_item in dict.items().iter() {
+        for dict_item in dict.items() {
             let item_tuple = dict_item
                 .downcast::<PyTuple>()
                 .map_err(|err| anyhow::anyhow!("Cannot cast to tuple: {err}"))?;
