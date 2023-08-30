@@ -1,6 +1,15 @@
-use pyo3::{pyclass, pymethods, types::PyTuple, PyAny, PyRefMut};
+use pyo3::{
+    pyclass, pymethods,
+    types::{PyDict, PyTuple},
+    PyAny, PyRefMut, Python,
+};
+use scylla::query::Query;
 
-use crate::utils::{py_to_value, ScyllaPyCQLDTO};
+use crate::{
+    queries::ScyllaPyRequestParams,
+    scylla_cls::Scylla,
+    utils::{py_to_value, ScyllaPyCQLDTO},
+};
 
 use super::utils::Timeout;
 
@@ -19,6 +28,8 @@ pub struct Select {
     columns_: Option<Vec<String>>,
     where_clauses_: Vec<String>,
     values_: Vec<ScyllaPyCQLDTO>,
+
+    request_params: ScyllaPyRequestParams,
 }
 
 impl Select {
@@ -101,8 +112,8 @@ impl Select {
 impl Select {
     #[new]
     #[must_use]
-    pub fn py_new(table: String) -> Select {
-        Select {
+    pub fn py_new(table: String) -> Self {
+        Self {
             table_: table,
             distinct_: false,
             allow_filtering_: false,
@@ -115,6 +126,7 @@ impl Select {
             columns_: None,
             where_clauses_: vec![],
             values_: vec![],
+            request_params: ScyllaPyRequestParams::default(),
         }
     }
 
@@ -212,6 +224,41 @@ impl Select {
     pub fn timeout(mut slf: PyRefMut<'_, Self>, timeout: Timeout) -> PyRefMut<'_, Self> {
         slf.timeout_ = Some(timeout);
         slf
+    }
+
+    /// Add parameters to the request.
+    ///
+    /// These parameters are used by scylla.
+    ///
+    /// # Errors
+    ///
+    /// May return an error, if request parameters
+    /// cannot be built.
+    #[pyo3(signature = (**params))]
+    pub fn request_params<'a>(
+        mut slf: PyRefMut<'a, Self>,
+        params: Option<&'a PyDict>,
+    ) -> anyhow::Result<PyRefMut<'a, Self>> {
+        if let Some(params) = params {
+            let parsed_params = ScyllaPyRequestParams::from_dict(params)?;
+            slf.request_params = parsed_params;
+        } else {
+            slf.request_params = ScyllaPyRequestParams::default();
+        }
+        Ok(slf)
+    }
+
+    /// Execute a query.
+    ///
+    /// This function is used to execute built query.
+    ///
+    /// # Errors
+    ///
+    /// Proxies errors from `native_execute`.
+    pub fn execute<'a>(&'a self, py: Python<'a>, scylla: &'a Scylla) -> anyhow::Result<&'a PyAny> {
+        let mut query = Query::new(self.build_query());
+        self.request_params.apply(&mut query);
+        scylla.native_execute(py, query, self.values_.clone())
     }
 
     #[must_use]

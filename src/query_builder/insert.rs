@@ -1,6 +1,11 @@
-use pyo3::{pyclass, pymethods, PyAny, PyRefMut};
+use pyo3::{pyclass, pymethods, types::PyDict, PyAny, PyRefMut, Python};
+use scylla::query::Query;
 
-use crate::utils::{py_to_value, ScyllaPyCQLDTO};
+use crate::{
+    queries::ScyllaPyRequestParams,
+    scylla_cls::Scylla,
+    utils::{py_to_value, ScyllaPyCQLDTO},
+};
 
 use super::utils::Timeout;
 
@@ -14,6 +19,8 @@ pub struct Insert {
     timeout_: Option<Timeout>,
     ttl_: Option<u64>,
     timestamp_: Option<u64>,
+
+    request_params: ScyllaPyRequestParams,
 }
 
 impl Insert {
@@ -86,6 +93,7 @@ impl Insert {
             timeout_: None,
             ttl_: None,
             timestamp_: None,
+            request_params: ScyllaPyRequestParams::default(),
         }
     }
 
@@ -127,6 +135,42 @@ impl Insert {
     pub fn ttl(mut slf: PyRefMut<'_, Self>, ttl: u64) -> PyRefMut<'_, Self> {
         slf.ttl_ = Some(ttl);
         slf
+    }
+
+    /// Add parameters to the request.
+    ///
+    /// These parameters are used by scylla.
+    ///
+    /// # Errors
+    ///
+    /// May return an error, if request parameters
+    /// cannot be built.
+    #[pyo3(signature = (**params))]
+    pub fn request_params<'a>(
+        mut slf: PyRefMut<'a, Self>,
+        params: Option<&'a PyDict>,
+    ) -> anyhow::Result<PyRefMut<'a, Self>> {
+        if let Some(params) = params {
+            let parsed_params = ScyllaPyRequestParams::from_dict(params)?;
+            slf.request_params = parsed_params;
+        } else {
+            slf.request_params = ScyllaPyRequestParams::default();
+        }
+        Ok(slf)
+    }
+
+    /// Execute a query.
+    ///
+    /// This function is used to execute built query.
+    ///
+    /// # Errors
+    ///
+    /// If query cannot be built.
+    /// Also proxies errors from `native_execute`.
+    pub fn execute<'a>(&'a self, py: Python<'a>, scylla: &'a Scylla) -> anyhow::Result<&'a PyAny> {
+        let mut query = Query::new(self.build_query()?);
+        self.request_params.apply(&mut query);
+        scylla.native_execute(py, query, self.values_.clone())
     }
 
     #[must_use]

@@ -6,9 +6,11 @@ from ._internal import (
     PreparedQuery,
     Batch,
     BatchType,
+    QueryResult,
     extra_types,
     query_builder,
 )
+
 from importlib.metadata import version
 
 __version__ = version("scyllapy")
@@ -22,6 +24,7 @@ __all__ = [
     "PreparedQuery",
     "Batch",
     "BatchType",
+    "QueryResult",
     "extra_types",
-    "query_builder",
+    "query_builder"
 ]

@@ -19,5 +19,8 @@ pub fn add_module<'a>(py: Python<'a>, name: &'static str) -> PyResult<&'a PyModu
     let module = PyModule::new(py, name)?;
     module.add_class::<Select>()?;
     module.add_class::<Insert>()?;
+    py.import("sys")?
+        .getattr("modules")?
+        .set_item(format!("_internal.{name}"), module)?;
     Ok(module)
 }

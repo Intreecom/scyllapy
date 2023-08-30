@@ -1,12 +1,5 @@
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
-use openssl::{
-    ssl::{SslContextBuilder, SslMethod, SslVerifyMode},
-    x509::X509,
-};
-use pyo3::{pyclass, pymethods, PyAny, Python};
-use scylla::{batch::Batch, query::Query};
-
 use crate::{
     batches::ScyllaPyBatch,
     inputs::{ExecuteInput, PrepareInput},
@@ -14,6 +7,12 @@ use crate::{
     query_results::ScyllaPyQueryResult,
     utils::{anyhow_py_future, parse_python_query_params},
 };
+use openssl::{
+    ssl::{SslContextBuilder, SslMethod, SslVerifyMode},
+    x509::X509,
+};
+use pyo3::{pyclass, pymethods, PyAny, Python};
+use scylla::{batch::Batch, frame::value::ValueList, query::Query};
 
 #[pyclass(frozen, weakref)]
 #[derive(Clone)]
@@ -33,6 +32,36 @@ pub struct Scylla {
     tcp_keepalive_interval: Option<u64>,
     tcp_nodelay: Option<bool>,
     scylla_session: Arc<tokio::sync::RwLock<Option<scylla::Session>>>,
+}
+
+impl Scylla {
+    /// Execute a query.
+    ///
+    /// This function is not exposed to python
+    /// and used to execute queries.
+    ///
+    /// # Errors
+    ///
+    /// May raise an error if driver
+    /// fails to execute query.
+    pub fn native_execute<'a>(
+        &'a self,
+        py: Python<'a>,
+        query: impl Into<Query> + Send + 'static,
+        values: impl ValueList + Send + 'static,
+    ) -> anyhow::Result<&'a PyAny> {
+        let session_arc = self.scylla_session.clone();
+        anyhow_py_future(py, async move {
+            let session_guard = session_arc.read().await;
+            let session = session_guard
+                .as_ref()
+                .ok_or(anyhow::anyhow!("Session is not initialized."))?;
+            let res = session.query(query, values).await?;
+            log::debug!("Query executed!");
+            Ok(ScyllaPyQueryResult::new(res))
+        })
+        .map_err(Into::into)
+    }
 }
 
 #[pymethods]
