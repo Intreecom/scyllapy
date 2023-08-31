@@ -11,10 +11,10 @@ use crate::{
     utils::{py_to_value, ScyllaPyCQLDTO},
 };
 
-use super::utils::Timeout;
+use super::utils::{pretty_build, Timeout};
 
 #[pyclass]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Select {
     table_: String,
     distinct_: bool,
@@ -86,7 +86,7 @@ impl Select {
                 Timeout::Int(int) => format!("USING TIMEOUT {int}"),
                 Timeout::Str(string) => format!("USING TIMEOUT {string}"),
             });
-        vec![
+        pretty_build([
             "SELECT",
             distinct,
             columns.as_str(),
@@ -100,11 +100,7 @@ impl Select {
             allow_filtering,
             bypass_cache,
             timeout.as_str(),
-        ]
-        .into_iter()
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<&str>>()
-        .join(" ")
+        ])
     }
 }
 
@@ -115,18 +111,7 @@ impl Select {
     pub fn py_new(table: String) -> Self {
         Self {
             table_: table,
-            distinct_: false,
-            allow_filtering_: false,
-            bypass_cache_: false,
-            timeout_: None,
-            limit_: None,
-            per_partition_limit_: None,
-            order_by_: None,
-            group_by_: None,
-            columns_: None,
-            where_clauses_: vec![],
-            values_: vec![],
-            request_params: ScyllaPyRequestParams::default(),
+            ..Default::default()
         }
     }
 
@@ -156,6 +141,7 @@ impl Select {
     /// # Errors
     /// May return an `Err` if any value cannot be
     /// translated into Rust.
+    #[pyo3(signature = (clause, values = None))]
     pub fn r#where<'a>(
         mut slf: PyRefMut<'a, Self>,
         clause: String,
@@ -269,5 +255,15 @@ impl Select {
     #[must_use]
     pub fn __repr__(&self) -> String {
         format!("{self:?}")
+    }
+
+    #[must_use]
+    pub fn __copy__(&self) -> Self {
+        self.clone()
+    }
+
+    #[must_use]
+    pub fn __deepcopy__(&self, _memo: &PyDict) -> Self {
+        self.clone()
     }
 }

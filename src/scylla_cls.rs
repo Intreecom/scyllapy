@@ -38,7 +38,10 @@ impl Scylla {
     /// Execute a query.
     ///
     /// This function is not exposed to python
-    /// and used to execute queries.
+    /// and used to execute queries from rust code.
+    ///
+    /// The main reason of using separate method is
+    /// an ability to use generic parameters in this function.
     ///
     /// # Errors
     ///

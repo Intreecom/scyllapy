@@ -7,15 +7,16 @@ use crate::{
     utils::{py_to_value, ScyllaPyCQLDTO},
 };
 
-use super::utils::Timeout;
+use super::utils::{pretty_build, Timeout};
 
 #[pyclass]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Insert {
     table_: String,
     if_not_exists_: bool,
     names_: Vec<String>,
     values_: Vec<ScyllaPyCQLDTO>,
+
     timeout_: Option<Timeout>,
     ttl_: Option<i32>,
     timestamp_: Option<u64>,
@@ -65,18 +66,13 @@ impl Insert {
             format!("USING {}", prepared_params.join(" AND "))
         };
 
-        let query = vec![
+        Ok(pretty_build([
             "INSERT INTO",
             self.table_.as_str(),
             names_values.as_str(),
             ifnexist,
             usings.as_str(),
-        ]
-        .into_iter()
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<&str>>()
-        .join(" ");
-        Ok(query)
+        ]))
     }
 }
 
@@ -85,15 +81,9 @@ impl Insert {
     #[new]
     #[must_use]
     pub fn py_new(table: String) -> Self {
-        Insert {
+        Self {
             table_: table,
-            if_not_exists_: false,
-            names_: vec![],
-            values_: vec![],
-            timeout_: None,
-            ttl_: None,
-            timestamp_: None,
-            request_params: ScyllaPyRequestParams::default(),
+            ..Default::default()
         }
     }
 
@@ -189,5 +179,15 @@ impl Insert {
     /// If cannot construct query.
     pub fn __str__(&self) -> anyhow::Result<String> {
         self.build_query()
+    }
+
+    #[must_use]
+    pub fn __copy__(&self) -> Self {
+        self.clone()
+    }
+
+    #[must_use]
+    pub fn __deepcopy__(&self, _memo: &PyDict) -> Self {
+        self.clone()
     }
 }
