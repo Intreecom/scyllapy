@@ -156,7 +156,7 @@ impl Select {
     /// # Errors
     /// May return an `Err` if any value cannot be
     /// translated into Rust.
-    pub fn filter<'a>(
+    pub fn r#where<'a>(
         mut slf: PyRefMut<'a, Self>,
         clause: String,
         values: Option<Vec<&'a PyAny>>,

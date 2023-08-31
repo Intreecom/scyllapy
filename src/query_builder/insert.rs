@@ -17,7 +17,7 @@ pub struct Insert {
     names_: Vec<String>,
     values_: Vec<ScyllaPyCQLDTO>,
     timeout_: Option<Timeout>,
-    ttl_: Option<u64>,
+    ttl_: Option<i32>,
     timestamp_: Option<u64>,
 
     request_params: ScyllaPyRequestParams,
@@ -115,7 +115,12 @@ impl Insert {
         value: &'a PyAny,
     ) -> anyhow::Result<PyRefMut<'a, Self>> {
         slf.names_.push(name);
-        slf.values_.push(py_to_value(value)?);
+        // Small optimization to speedup inserts.
+        if value.is_none() {
+            slf.values_.push(ScyllaPyCQLDTO::Unset);
+        } else {
+            slf.values_.push(py_to_value(value)?);
+        }
         Ok(slf)
     }
 
@@ -132,7 +137,7 @@ impl Insert {
     }
 
     #[must_use]
-    pub fn ttl(mut slf: PyRefMut<'_, Self>, ttl: u64) -> PyRefMut<'_, Self> {
+    pub fn ttl(mut slf: PyRefMut<'_, Self>, ttl: i32) -> PyRefMut<'_, Self> {
         slf.ttl_ = Some(ttl);
         slf
     }
