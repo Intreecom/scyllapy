@@ -16,13 +16,9 @@ mod utils;
 ///
 /// * Cannot create module by any reason.
 /// * Cannot add class by some reason.
-pub fn add_module<'a>(py: Python<'a>, name: &'static str) -> PyResult<&'a PyModule> {
-    let module = PyModule::new(py, name)?;
+pub fn add_module(_py: Python<'_>, module: &PyModule) -> PyResult<()> {
     module.add_class::<Select>()?;
     module.add_class::<Insert>()?;
     module.add_class::<Delete>()?;
-    py.import("sys")?
-        .getattr("modules")?
-        .set_item(format!("_internal.{name}"), module)?;
-    Ok(module)
+    Ok(())
 }

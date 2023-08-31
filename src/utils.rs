@@ -2,8 +2,8 @@ use std::{collections::HashMap, future::Future, str::FromStr};
 
 use chrono::Duration;
 use pyo3::{
-    types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PySet, PyString, PyTuple},
-    IntoPy, Py, PyAny, PyObject, Python, ToPyObject,
+    types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyModule, PySet, PyString, PyTuple},
+    IntoPy, Py, PyAny, PyObject, PyResult, Python, ToPyObject,
 };
 use scylla::frame::{
     response::result::{ColumnType, CqlValue},
@@ -13,6 +13,38 @@ use scylla::frame::{
 use std::net::IpAddr;
 
 use crate::extra_types::{BigInt, Counter, Double, ScyllaPyUnset, SmallInt, TinyInt};
+
+/// Add submodule.
+///
+/// This function is required,
+/// because by default for native libs python
+/// adds module as an attribute and
+/// doesn't add it's submodules in list
+/// of all available modules.
+///
+/// To surpass this issue, we
+/// maually update `sys.modules` attribute,
+/// adding all submodules.
+///
+/// # Errors
+///
+/// May result in an error, if
+/// cannot construct modules, or add it,
+/// or modify `sys.modules` attr.
+pub fn add_submodule(
+    py: Python<'_>,
+    parent_mod: &PyModule,
+    name: &'static str,
+    module_constuctor: impl FnOnce(Python<'_>, &PyModule) -> PyResult<()>,
+) -> PyResult<()> {
+    let sub_module = PyModule::new(py, name)?;
+    module_constuctor(py, sub_module)?;
+    parent_mod.add_submodule(sub_module)?;
+    py.import("sys")?
+        .getattr("modules")?
+        .set_item(format!("{}.{name}", parent_mod.name()?), sub_module)?;
+    Ok(())
+}
 
 /// Small function to integrate anyhow result
 /// and `pyo3_asyncio`.
