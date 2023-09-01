@@ -21,11 +21,11 @@ pub enum IfCluase {
 
 impl IfCluase {
     #[must_use]
-    pub fn extend_values(&self, values: Vec<ScyllaPyCQLDTO>) -> Vec<ScyllaPyCQLDTO> {
+    pub fn extend_values(&self, query_values: Vec<ScyllaPyCQLDTO>) -> Vec<ScyllaPyCQLDTO> {
         match self {
-            IfCluase::Exists => values,
+            IfCluase::Exists => query_values,
             IfCluase::Condition { clauses: _, values } => {
-                values.iter().chain(values.iter()).cloned().collect()
+                query_values.iter().chain(values.iter()).cloned().collect()
             }
         }
     }
