@@ -236,3 +236,70 @@ async def execute(scylla: Scylla) -> None:
         [extra_types.BigInt(1), "memelord"],
     )
 ```
+
+
+# Query building
+
+ScyllaPy gives you ability to build queries,
+instead of working with raw cql. The main advantage that it's harder to make syntax error,
+while creating queries.
+
+Base classes for Query building can be found in `scyllapy.query_builder`.
+
+Usage example:
+
+```python
+from scyllapy import Scylla
+from scyllapy.query_builder import Insert, Select, Update, Delete
+
+
+async def main(scylla: Scylla):
+    await scylla.execute("CREATE TABLE users(id INT PRIMARY KEY, name TEXT)")
+
+    user_id = 1
+
+    # We create a user with id and name.
+    await Insert("users").set("id", user_id).set(
+        "name", "user"
+    ).if_not_exists().execute(scylla)
+
+    # We update it's name to be user2
+    await Update("users").set("name", "user2").where("id = ?", [user_id]).execute(
+        scylla
+    )
+
+    # We select all users with id = user_id;
+    res = await Select("users").where("id = ?", [user_id]).execute(scylla)
+    # Verify that it's correct.
+    assert res.first() == {"id": 1, "name": "user2"}
+
+    # We delete our user.
+    await Delete("users").where("id = ?", [user_id]).if_exists().execute(scylla)
+
+    res = await Select("users").where("id = ?", [user_id]).execute(scylla)
+
+    # Verify that user is deleted.
+    assert not res.all()
+
+    await scylla.execute("DROP TABLE users")
+
+```
+
+Also, you can pass built queries into InlineBatches. You cannot use queries built with query_builder module with default batches. This constraint is exists, because we
+need to use values from within your queries and should ignore all parameters passed in
+`batch` method of scylla.
+
+Here's batch usage example.
+
+```python
+from scyllapy import Scylla, InlineBatch
+from scyllapy.query_builder import Insert
+
+
+async def execute_batch(scylla: Scylla) -> None:
+    batch = InlineBatch()
+    for i in range(10):
+        Insert("users").set("id", i).set("name", "test").add_to_batch(batch)
+    await scylla.batch(batch)
+
+```
