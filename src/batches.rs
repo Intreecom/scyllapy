@@ -1,10 +1,7 @@
-use pyo3::{pyclass, pymethods};
+use pyo3::{pyclass, pymethods, types::PyDict};
 use scylla::batch::{Batch, BatchType};
 
-use crate::{
-    consistencies::{ScyllaPyConsistency, ScyllaPySerialConsistency},
-    inputs::BatchQueryInput,
-};
+use crate::{inputs::BatchQueryInput, queries::ScyllaPyRequestParams};
 
 #[pyclass(name = "BatchType")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -18,58 +15,35 @@ pub enum ScyllaPyBatchType {
 #[derive(Clone)]
 pub struct ScyllaPyBatch {
     inner: Batch,
-    #[pyo3(get)]
-    pub consistency: Option<ScyllaPyConsistency>,
-    #[pyo3(get)]
-    pub serial_consistency: Option<ScyllaPySerialConsistency>,
-    #[pyo3(get)]
-    pub request_timeout: Option<u64>,
-    #[pyo3(get)]
-    pub timestamp: Option<i64>,
-    #[pyo3(get)]
-    pub is_idempotent: Option<bool>,
-    #[pyo3(get)]
-    pub tracing: Option<bool>,
+    request_params: ScyllaPyRequestParams,
 }
 
 impl From<ScyllaPyBatch> for Batch {
     fn from(value: ScyllaPyBatch) -> Self {
-        value.inner
+        let mut inner = value.inner;
+        value.request_params.apply_to_batch(&mut inner);
+        inner
     }
 }
 
 #[pymethods]
 impl ScyllaPyBatch {
+    /// Create new batch.
+    ///
+    /// # Errors
+    ///
+    /// Can return an error in case if
+    /// wrong type for parameters were passed.
     #[new]
     #[pyo3(signature = (
         batch_type = ScyllaPyBatchType::UNLOGGED,
-        consistency = None,
-        serial_consistency = None,
-        request_timeout = None,
-        timestamp = None,
-        is_idempotent = None,
-        tracing = None,
+        **params
     ))]
-    #[allow(clippy::too_many_arguments)]
-    #[must_use]
-    pub fn py_new(
-        batch_type: ScyllaPyBatchType,
-        consistency: Option<ScyllaPyConsistency>,
-        serial_consistency: Option<ScyllaPySerialConsistency>,
-        request_timeout: Option<u64>,
-        timestamp: Option<i64>,
-        is_idempotent: Option<bool>,
-        tracing: Option<bool>,
-    ) -> Self {
-        Self {
+    pub fn py_new(batch_type: ScyllaPyBatchType, params: Option<&PyDict>) -> anyhow::Result<Self> {
+        Ok(Self {
             inner: Batch::new(batch_type.into()),
-            consistency,
-            serial_consistency,
-            request_timeout,
-            timestamp,
-            is_idempotent,
-            tracing,
-        }
+            request_params: ScyllaPyRequestParams::from_dict(params)?,
+        })
     }
 
     pub fn add_query(&mut self, query: BatchQueryInput) {

@@ -21,7 +21,7 @@ pub struct Insert {
     ttl_: Option<i32>,
     timestamp_: Option<u64>,
 
-    request_params: ScyllaPyRequestParams,
+    request_params_: ScyllaPyRequestParams,
 }
 
 impl Insert {
@@ -145,12 +145,7 @@ impl Insert {
         mut slf: PyRefMut<'a, Self>,
         params: Option<&'a PyDict>,
     ) -> anyhow::Result<PyRefMut<'a, Self>> {
-        if let Some(params) = params {
-            let parsed_params = ScyllaPyRequestParams::from_dict(params)?;
-            slf.request_params = parsed_params;
-        } else {
-            slf.request_params = ScyllaPyRequestParams::default();
-        }
+        slf.request_params_ = ScyllaPyRequestParams::from_dict(params)?;
         Ok(slf)
     }
 
@@ -164,7 +159,7 @@ impl Insert {
     /// Also proxies errors from `native_execute`.
     pub fn execute<'a>(&'a self, py: Python<'a>, scylla: &'a Scylla) -> anyhow::Result<&'a PyAny> {
         let mut query = Query::new(self.build_query()?);
-        self.request_params.apply(&mut query);
+        self.request_params_.apply_to_query(&mut query);
         scylla.native_execute(py, query, self.values_.clone())
     }
 
