@@ -1,13 +1,14 @@
 use pyo3::{pyclass, pymethods, types::PyDict, PyAny, PyRefMut, Python};
 use scylla::query::Query;
 
+use super::utils::{pretty_build, IfCluase, Timeout};
 use crate::{
+    batches::ScyllaPyInlineBatch,
     queries::ScyllaPyRequestParams,
     scylla_cls::Scylla,
     utils::{py_to_value, ScyllaPyCQLDTO},
 };
-
-use super::utils::{pretty_build, IfCluase, Timeout};
+use scylla::frame::value::SerializedValues;
 
 #[pyclass]
 #[derive(Clone, Debug, Default)]
@@ -200,6 +201,31 @@ impl Delete {
             self.values_.clone()
         };
         scylla.native_execute(py, query, values)
+    }
+
+    /// Add to batch
+    ///
+    /// Adds current query to batch.
+    ///
+    /// # Error
+    ///
+    /// May result into error if query cannot be build.
+    /// Or values cannot be passed to batch.
+    pub fn add_to_batch(&self, batch: &mut ScyllaPyInlineBatch) -> anyhow::Result<()> {
+        let mut query = Query::new(self.build_query()?);
+        self.request_params_.apply_to_query(&mut query);
+
+        let values = if let Some(if_clause) = &self.if_clause_ {
+            if_clause.extend_values(self.values_.clone())
+        } else {
+            self.values_.clone()
+        };
+        let mut serialized = SerializedValues::new();
+        for val in values {
+            serialized.add_value(&val)?;
+        }
+        batch.add_query_inner(query, serialized);
+        Ok(())
     }
 
     #[must_use]

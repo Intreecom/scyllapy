@@ -86,7 +86,7 @@ class Scylla:
         """
     async def batch(
         self,
-        batch: Batch,
+        batch: Batch | InlineBatch,
         params: Optional[Iterable[Iterable[Any] | dict[str, Any]]] = None,
     ) -> QueryResult:
         """
@@ -166,12 +166,6 @@ class BatchType:
 class Batch:
     """Class for batching queries together."""
 
-    consistency: Consistency | None
-    serial_consistency: SerialConsistency | None
-    request_timeout: int | None
-    is_idempotent: bool | None
-    tracing: bool | None
-
     def __init__(
         self,
         batch_type: BatchType = BatchType.UNLOGGED,
@@ -183,6 +177,23 @@ class Batch:
         tracing: bool | None = None,
     ) -> None: ...
     def add_query(self, query: Query | PreparedQuery | str) -> None: ...
+
+class InlineBatch:
+    def __init__(
+        self,
+        batch_type: BatchType = BatchType.UNLOGGED,
+        consistency: Consistency | None = None,
+        serial_consistency: SerialConsistency | None = None,
+        request_timeout: int | None = None,
+        timestamp: int | None = None,
+        is_idempotent: bool | None = None,
+        tracing: bool | None = None,
+    ) -> None: ...
+    def add_query(
+        self,
+        query: Query | PreparedQuery | str,
+        values: list[Any] | None = None,
+    ) -> None: ...
 
 class Consistency:
     """Consistency for query."""

@@ -6,12 +6,14 @@ use pyo3::{
 use scylla::query::Query;
 
 use crate::{
+    batches::ScyllaPyInlineBatch,
     queries::ScyllaPyRequestParams,
     scylla_cls::Scylla,
     utils::{py_to_value, ScyllaPyCQLDTO},
 };
 
 use super::utils::{pretty_build, Timeout};
+use scylla::frame::value::SerializedValues;
 
 #[pyclass]
 #[derive(Clone, Debug, Default)]
@@ -240,6 +242,25 @@ impl Select {
         let mut query = Query::new(self.build_query());
         self.request_params_.apply_to_query(&mut query);
         scylla.native_execute(py, query, self.values_.clone())
+    }
+
+    /// Add to batch
+    ///
+    /// Adds current query to batch.
+    ///
+    /// # Error
+    ///
+    /// Returns error if values cannot be passed to batch.
+    pub fn add_to_batch(&self, batch: &mut ScyllaPyInlineBatch) -> anyhow::Result<()> {
+        let mut query = Query::new(self.build_query());
+        self.request_params_.apply_to_query(&mut query);
+
+        let mut serialized = SerializedValues::new();
+        for val in self.values_.clone() {
+            serialized.add_value(&val)?;
+        }
+        batch.add_query_inner(query, serialized);
+        Ok(())
     }
 
     #[must_use]

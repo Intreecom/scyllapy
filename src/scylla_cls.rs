@@ -1,8 +1,7 @@
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
 use crate::{
-    batches::ScyllaPyBatch,
-    inputs::{ExecuteInput, PrepareInput},
+    inputs::{BatchInput, ExecuteInput, PrepareInput},
     prepared_queries::ScyllaPyPreparedQuery,
     query_results::ScyllaPyQueryResult,
     utils::{anyhow_py_future, parse_python_query_params},
@@ -12,7 +11,7 @@ use openssl::{
     x509::X509,
 };
 use pyo3::{pyclass, pymethods, PyAny, Python};
-use scylla::{batch::Batch, frame::value::ValueList, query::Query};
+use scylla::{frame::value::ValueList, query::Query};
 
 #[pyclass(frozen, weakref)]
 #[derive(Clone)]
@@ -281,20 +280,26 @@ impl Scylla {
     pub fn batch<'a>(
         &'a self,
         py: Python<'a>,
-        batch: ScyllaPyBatch,
+        batch: BatchInput,
         params: Option<Vec<&'a PyAny>>,
     ) -> anyhow::Result<&'a PyAny> {
         // We need to prepare parameter we're going to use
         // in query.
-        let mut batch_params = Vec::new();
         // If parameters were passed, we parse python values,
         // to corresponding CQL values.
-        if let Some(passed_params) = params {
-            for query_params in passed_params {
-                batch_params.push(parse_python_query_params(Some(query_params), false)?);
+
+        let (batch, batch_params) = match batch {
+            BatchInput::Batch(batch) => {
+                let mut batch_params = Vec::new();
+                if let Some(passed_params) = params {
+                    for query_params in passed_params {
+                        batch_params.push(parse_python_query_params(Some(query_params), false)?);
+                    }
+                }
+                (batch.into(), batch_params)
             }
-        }
-        let batch = Batch::from(batch);
+            BatchInput::InlineBatch(inline) => inline.into(),
+        };
         // We need this clone, to safely share the session between threads.
         let session_arc = self.scylla_session.clone();
         anyhow_py_future(py, async move {

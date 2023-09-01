@@ -24,6 +24,7 @@ fn _internal(py: Python<'_>, pymod: &PyModule) -> PyResult<()> {
     pymod.add_class::<prepared_queries::ScyllaPyPreparedQuery>()?;
     pymod.add_class::<batches::ScyllaPyBatch>()?;
     pymod.add_class::<batches::ScyllaPyBatchType>()?;
+    pymod.add_class::<batches::ScyllaPyInlineBatch>()?;
     pymod.add_class::<query_results::ScyllaPyQueryResult>()?;
     add_submodule(py, pymod, "extra_types", extra_types::module_constructor)?;
     add_submodule(py, pymod, "query_builder", query_builder::add_module)?;
