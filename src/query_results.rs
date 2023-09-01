@@ -80,7 +80,7 @@ impl ScyllaPyQueryResult {
         py: Python<'_>,
         as_class: Option<Py<PyAny>>,
     ) -> anyhow::Result<Option<Py<PyAny>>> {
-        let Some(rows) = self.get_rows(py, Some(1))? else{
+        let Some(rows) = self.get_rows(py, Some(1))? else {
             return Err(anyhow::anyhow!("The query doesn't have returns ."));
         };
         if rows.is_empty() {
@@ -106,13 +106,13 @@ impl ScyllaPyQueryResult {
     /// * Query doesn't have a returns;
     /// * Results don't have any columns.
     pub fn scalars(&self, py: Python<'_>) -> anyhow::Result<Option<Py<PyAny>>> {
-        let Some(rows) = self.get_rows(py, None)? else{
+        let Some(rows) = self.get_rows(py, None)? else {
             return Err(anyhow::anyhow!("The query doesn't have returns ."));
         };
         if rows.is_empty() {
             return Ok(Some(rows.to_object(py)));
         }
-        let Some(col_name) = self.inner.col_specs.first() else{
+        let Some(col_name) = self.inner.col_specs.first() else {
             return Err(anyhow::anyhow!("Cannot find any columns"));
         };
         Ok(Some(
@@ -134,13 +134,13 @@ impl ScyllaPyQueryResult {
     /// * Query doesn't have a returns;
     /// * Results don't have any columns.
     pub fn scalar(&self, py: Python<'_>) -> anyhow::Result<Option<Py<PyAny>>> {
-        let Some(rows) = self.get_rows(py, Some(1))? else{
+        let Some(rows) = self.get_rows(py, Some(1))? else {
             return Err(anyhow::anyhow!("The query doesn't have returns ."));
         };
         if rows.is_empty() {
             return Ok(None);
         }
-        let Some(col_name) = self.inner.col_specs.first() else{
+        let Some(col_name) = self.inner.col_specs.first() else {
             return Err(anyhow::anyhow!("Cannot find any columns"));
         };
         Ok(Some(

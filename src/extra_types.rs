@@ -56,13 +56,12 @@ impl ScyllaPyUnset {
 ///
 /// May return error if module cannot be created,
 /// or any of classes cannot be added.
-pub fn add_module<'a>(py: Python<'a>, name: &'static str) -> PyResult<&'a PyModule> {
-    let module = PyModule::new(py, name)?;
+pub fn module_constructor(_py: Python<'_>, module: &PyModule) -> PyResult<()> {
     module.add_class::<SmallInt>()?;
     module.add_class::<TinyInt>()?;
     module.add_class::<BigInt>()?;
     module.add_class::<Double>()?;
     module.add_class::<Counter>()?;
     module.add_class::<ScyllaPyUnset>()?;
-    Ok(module)
+    Ok(())
 }
