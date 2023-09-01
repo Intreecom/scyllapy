@@ -1,21 +1,20 @@
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
+use crate::{
+    inputs::{BatchInput, ExecuteInput, PrepareInput},
+    prepared_queries::ScyllaPyPreparedQuery,
+    query_results::ScyllaPyQueryResult,
+    utils::{anyhow_py_future, parse_python_query_params},
+};
 use openssl::{
     ssl::{SslContextBuilder, SslMethod, SslVerifyMode},
     x509::X509,
 };
 use pyo3::{pyclass, pymethods, PyAny, Python};
-use scylla::{batch::Batch, query::Query};
-
-use crate::{
-    batches::ScyllaPyBatch,
-    inputs::{ExecuteInput, PrepareInput},
-    prepared_queries::ScyllaPyPreparedQuery,
-    query_results::ScyllaPyQueryResult,
-    utils::{anyhow_py_future, parse_python_query_params},
-};
+use scylla::{frame::value::ValueList, query::Query};
 
 #[pyclass(frozen, weakref)]
+#[derive(Clone)]
 pub struct Scylla {
     contact_points: Vec<String>,
     username: Option<String>,
@@ -32,6 +31,39 @@ pub struct Scylla {
     tcp_keepalive_interval: Option<u64>,
     tcp_nodelay: Option<bool>,
     scylla_session: Arc<tokio::sync::RwLock<Option<scylla::Session>>>,
+}
+
+impl Scylla {
+    /// Execute a query.
+    ///
+    /// This function is not exposed to python
+    /// and used to execute queries from rust code.
+    ///
+    /// The main reason of using separate method is
+    /// an ability to use generic parameters in this function.
+    ///
+    /// # Errors
+    ///
+    /// May raise an error if driver
+    /// fails to execute query.
+    pub fn native_execute<'a>(
+        &'a self,
+        py: Python<'a>,
+        query: impl Into<Query> + Send + 'static,
+        values: impl ValueList + Send + 'static,
+    ) -> anyhow::Result<&'a PyAny> {
+        let session_arc = self.scylla_session.clone();
+        anyhow_py_future(py, async move {
+            let session_guard = session_arc.read().await;
+            let session = session_guard
+                .as_ref()
+                .ok_or(anyhow::anyhow!("Session is not initialized."))?;
+            let res = session.query(query, values).await?;
+            log::debug!("Query executed!");
+            Ok(ScyllaPyQueryResult::new(res))
+        })
+        .map_err(Into::into)
+    }
 }
 
 #[pymethods]
@@ -248,20 +280,26 @@ impl Scylla {
     pub fn batch<'a>(
         &'a self,
         py: Python<'a>,
-        batch: ScyllaPyBatch,
+        batch: BatchInput,
         params: Option<Vec<&'a PyAny>>,
     ) -> anyhow::Result<&'a PyAny> {
         // We need to prepare parameter we're going to use
         // in query.
-        let mut batch_params = Vec::new();
         // If parameters were passed, we parse python values,
         // to corresponding CQL values.
-        if let Some(passed_params) = params {
-            for query_params in passed_params {
-                batch_params.push(parse_python_query_params(Some(query_params), false)?);
+
+        let (batch, batch_params) = match batch {
+            BatchInput::Batch(batch) => {
+                let mut batch_params = Vec::new();
+                if let Some(passed_params) = params {
+                    for query_params in passed_params {
+                        batch_params.push(parse_python_query_params(Some(query_params), false)?);
+                    }
+                }
+                (batch.into(), batch_params)
             }
-        }
-        let batch = Batch::from(batch);
+            BatchInput::InlineBatch(inline) => inline.into(),
+        };
         // We need this clone, to safely share the session between threads.
         let session_arc = self.scylla_session.clone();
         anyhow_py_future(py, async move {

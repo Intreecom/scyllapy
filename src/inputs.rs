@@ -1,6 +1,10 @@
 use pyo3::FromPyObject;
 
-use crate::{prepared_queries::ScyllaPyPreparedQuery, queries::ScyllaPyQuery};
+use crate::{
+    batches::{ScyllaPyBatch, ScyllaPyInlineBatch},
+    prepared_queries::ScyllaPyPreparedQuery,
+    queries::ScyllaPyQuery,
+};
 use scylla::{batch::BatchStatement, query::Query};
 
 #[derive(Clone, FromPyObject)]
@@ -48,4 +52,12 @@ impl From<PrepareInput> for Query {
             PrepareInput::Query(query) => Self::from(query),
         }
     }
+}
+
+#[derive(Clone, FromPyObject)]
+pub enum BatchInput {
+    #[pyo3(transparent, annotation = "Batch")]
+    Batch(ScyllaPyBatch),
+    #[pyo3(transparent, annotation = "InlineBatch")]
+    InlineBatch(ScyllaPyInlineBatch),
 }
