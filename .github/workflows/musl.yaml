@@ -7,33 +7,28 @@ permissions:
   contents: write
 
 jobs:
-  linux:
+  musllinux:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        manylinux: [auto, musllinux_1_1]
-        platform: [
-          { target: "x86_64-unknown-linux-musl", image_tag: "x86_64-musl" },
-          { target: "i686-unknown-linux-musl", image_tag: "i686-musl" },
-          { target: "aarch64-unknown-linux-musl", image_tag: "aarch64-musl" },
-          { target: "armv7-unknown-linux-musleabihf", image_tag: "armv7-musleabihf" },
-          { target: "powerpc64le-unknown-linux-musl", image_tag: "powerpc64le-musl" },
-        ]
-    container:
-      image: docker://messense/rust-musl-cross:${{ matrix.platform.image_tag }}
-      env:
-        CFLAGS_armv7_unknown_linux_musleabihf: '-mfpu=vfpv3-d16'
+        target:
+          - x86_64-unknown-linux-musl
+          - i686-unknown-linux-musl
     steps:
       - uses: actions/checkout@v3
-      - name: Instal OpenSSL
-        run: sudo apt-get update -y && sudo apt-get install -y libssl-dev openssl
-      - name: Build Wheels
-        uses: PyO3/maturin-action@main
+      - uses: actions/setup-python@v4
         with:
-          target: ${{ matrix.platform.target }}
-          manylinux: ${{ matrix.manylinux }}
-          container: off
-          args: --release -o dist
+          python-version: '3.11'
+          architecture: x64
+      - name: Instal OpenSSL
+        run: sudo apt-get update && sudo apt-get install libssl-dev openssl
+      - name: Build wheels
+        uses: messense/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: musllinux_1_2
+          args: --release --out dist
+          maturin-version: "v0.13.0"
       - name: Upload wheels
         uses: actions/upload-artifact@v3
         with:
