@@ -26,9 +26,9 @@ jobs:
         uses: messense/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          manylinux: musllinux_1_2
           args: --release --out dist
-          maturin-version: "v0.13.0"
+          sccache: 'true'
+          manylinux: musllinux_1_2
       - name: Upload wheels
         uses: actions/upload-artifact@v3
         with:
