@@ -1,4 +1,8 @@
-# Scylla driver for python
+[![PyPI](https://img.shields.io/pypi/v/scyllapy?style=for-the-badge)](https://pypi.org/project/scyllapy/)
+[![PyPI - Downloads](https://img.shields.io/pypi/dm/scyllapy?style=for-the-badge)](https://pypistats.org/packages/scyllapy)
+
+
+# Async Scylla driver for python
 
 Python driver for ScyllaDB written in Rust. Though description says it's for scylla,
 however it can be used with Cassandra and AWS keyspaces as well.
