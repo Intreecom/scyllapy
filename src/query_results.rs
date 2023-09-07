@@ -158,6 +158,16 @@ impl ScyllaPyQueryResult {
         ))
     }
 
+    /// Get lenght of the result.
+    ///
+    /// # Errors
+    ///
+    /// May result in an error
+    /// if returned result doesn't contain row.
+    pub fn __len__(&self) -> anyhow::Result<usize> {
+        Ok(self.inner.rows_num()?)
+    }
+
     #[getter]
     pub fn trace_id<'a>(&'a self, py: Python<'a>) -> Option<Py<PyAny>> {
         self.inner
