@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         target: [x86_64, x86, aarch64, armv7, ppc64le] # Also can be enabled: s390x (gnu)
@@ -125,7 +125,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   musllinux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         target:
@@ -138,7 +138,7 @@ jobs:
           python-version: '3.11'
           architecture: x64
       - name: Instal OpenSSL
-        run: sudo apt-get update && sudo apt-get install libssl-dev openssl
+        run: sudo apt-get update && sudo apt-get install libssl-dev openssl libipc-run-perl
       - name: Build wheels
         uses: messense/maturin-action@v1
         with:
