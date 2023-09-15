@@ -49,17 +49,17 @@ pub fn add_submodule(
     Ok(())
 }
 
-/// Small function to integrate anyhow result
+/// Small function to integrate custom result type
 /// and `pyo3_asyncio`.
 ///
 /// It's almost the same as `future_into_py`,
-/// but it expects future to return anyhow result, rather
+/// but it expects future to return `ScyllaPyResult` type, rather
 /// than `PyResult` from `pyo3`. It's useful for using `?` operators all over the place.
 ///
 /// # Errors
 ///
 /// If result of a future was unsuccessful, it propagates the error.
-pub fn anyhow_py_future<F, T>(py: Python<'_>, fut: F) -> ScyllaPyResult<&PyAny>
+pub fn scyllapy_future<F, T>(py: Python<'_>, fut: F) -> ScyllaPyResult<&PyAny>
 where
     F: Future<Output = ScyllaPyResult<T>> + Send + 'static,
     T: IntoPy<PyObject>,

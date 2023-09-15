@@ -2,7 +2,8 @@ use pyo3::{pyclass, pymethods, types::PyDict, PyAny};
 use scylla::batch::{Batch, BatchStatement, BatchType};
 
 use crate::{
-    inputs::BatchQueryInput, queries::ScyllaPyRequestParams, utils::parse_python_query_params,
+    exceptions::rust_err::ScyllaPyResult, inputs::BatchQueryInput, queries::ScyllaPyRequestParams,
+    utils::parse_python_query_params,
 };
 use scylla::frame::value::SerializedValues;
 
@@ -57,7 +58,7 @@ impl ScyllaPyBatch {
         batch_type = ScyllaPyBatchType::UNLOGGED,
         **params
     ))]
-    pub fn py_new(batch_type: ScyllaPyBatchType, params: Option<&PyDict>) -> anyhow::Result<Self> {
+    pub fn py_new(batch_type: ScyllaPyBatchType, params: Option<&PyDict>) -> ScyllaPyResult<Self> {
         Ok(Self {
             inner: Batch::new(batch_type.into()),
             request_params: ScyllaPyRequestParams::from_dict(params)?,
@@ -93,7 +94,7 @@ impl ScyllaPyInlineBatch {
         batch_type = ScyllaPyBatchType::UNLOGGED,
         **params
     ))]
-    pub fn py_new(batch_type: ScyllaPyBatchType, params: Option<&PyDict>) -> anyhow::Result<Self> {
+    pub fn py_new(batch_type: ScyllaPyBatchType, params: Option<&PyDict>) -> ScyllaPyResult<Self> {
         Ok(Self {
             inner: Batch::new(batch_type.into()),
             request_params: ScyllaPyRequestParams::from_dict(params)?,
@@ -116,7 +117,7 @@ impl ScyllaPyInlineBatch {
         &mut self,
         query: BatchQueryInput,
         values: Option<&PyAny>,
-    ) -> anyhow::Result<()> {
+    ) -> ScyllaPyResult<()> {
         self.inner.append_statement(query);
         if let Some(passed_params) = values {
             self.values

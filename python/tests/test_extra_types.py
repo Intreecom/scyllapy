@@ -1,6 +1,7 @@
 from typing import Any
 import pytest
 from scyllapy import Scylla, extra_types
+from scyllapy.exceptions import ScyllaPyDBError
 from tests.utils import random_string
 
 
@@ -25,7 +26,7 @@ async def test_int_types(
         f"CREATE TABLE {table_name} (id {type_name}, PRIMARY KEY (id))"
     )
     insert_query = f"INSERT INTO {table_name}(id) VALUES (?)"
-    with pytest.raises(RuntimeError):
+    with pytest.raises(ScyllaPyDBError):
         await scylla.execute(insert_query, [test_val])
 
     await scylla.execute(insert_query, [type_cls(test_val)])
@@ -45,7 +46,7 @@ async def test_counter(scylla: Scylla) -> None:
 
     query = f"UPDATE {table_name} SET count = count + ? WHERE id = ?"
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(ScyllaPyDBError):
         await scylla.execute(query, [1, 1])
 
     await scylla.execute(query, [extra_types.Counter(1), 1])

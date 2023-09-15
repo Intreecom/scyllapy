@@ -3,6 +3,7 @@ use scylla::query::Query;
 
 use crate::{
     batches::ScyllaPyInlineBatch,
+    exceptions::rust_err::{ScyllaPyError, ScyllaPyResult},
     queries::ScyllaPyRequestParams,
     scylla_cls::Scylla,
     utils::{py_to_value, ScyllaPyCQLDTO},
@@ -46,15 +47,15 @@ pub struct Update {
 }
 
 impl Update {
-    fn build_query(&self) -> anyhow::Result<String> {
+    fn build_query(&self) -> ScyllaPyResult<String> {
         if self.assignments_.is_empty() {
-            return Err(anyhow::anyhow!(
-                "Update should contain at least one assignment"
+            return Err(ScyllaPyError::QueryBuilderError(
+                "Update should contain at least one assignment",
             ));
         }
         if self.where_clauses_.is_empty() {
-            return Err(anyhow::anyhow!(
-                "Update should contain at least one where clause"
+            return Err(ScyllaPyError::QueryBuilderError(
+                "Update should contain at least one where clause",
             ));
         }
         let params = vec![
@@ -127,7 +128,7 @@ impl Update {
         mut slf: PyRefMut<'a, Self>,
         name: String,
         value: &'a PyAny,
-    ) -> anyhow::Result<PyRefMut<'a, Self>> {
+    ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         slf.assignments_.push(UpdateAssignment::Simple(name));
         slf.values_.push(py_to_value(value)?);
         Ok(slf)
@@ -143,7 +144,7 @@ impl Update {
         mut slf: PyRefMut<'a, Self>,
         name: String,
         value: &'a PyAny,
-    ) -> anyhow::Result<PyRefMut<'a, Self>> {
+    ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         slf.assignments_
             .push(UpdateAssignment::Inc(name.clone(), name));
         slf.values_.push(py_to_value(value)?);
@@ -160,7 +161,7 @@ impl Update {
         mut slf: PyRefMut<'a, Self>,
         name: String,
         value: &'a PyAny,
-    ) -> anyhow::Result<PyRefMut<'a, Self>> {
+    ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         slf.assignments_
             .push(UpdateAssignment::Dec(name.clone(), name));
         slf.values_.push(py_to_value(value)?);
@@ -182,7 +183,7 @@ impl Update {
         mut slf: PyRefMut<'a, Self>,
         clause: String,
         values: Option<Vec<&'a PyAny>>,
-    ) -> anyhow::Result<PyRefMut<'a, Self>> {
+    ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         slf.where_clauses_.push(clause);
         if let Some(vals) = values {
             for value in vals {
@@ -222,7 +223,7 @@ impl Update {
     pub fn request_params<'a>(
         mut slf: PyRefMut<'a, Self>,
         params: Option<&'a PyDict>,
-    ) -> anyhow::Result<PyRefMut<'a, Self>> {
+    ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         slf.request_params_ = ScyllaPyRequestParams::from_dict(params)?;
         Ok(slf)
     }
@@ -244,7 +245,7 @@ impl Update {
         mut slf: PyRefMut<'a, Self>,
         clause: String,
         values: Option<Vec<&'a PyAny>>,
-    ) -> anyhow::Result<PyRefMut<'a, Self>> {
+    ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         let parsed_values = if let Some(vals) = values {
             vals.iter()
                 .map(|item| py_to_value(item))
@@ -274,7 +275,7 @@ impl Update {
     /// May return an error, if something goes wrong
     /// during query building
     /// or during query execution.
-    pub fn execute<'a>(&'a self, py: Python<'a>, scylla: &'a Scylla) -> anyhow::Result<&'a PyAny> {
+    pub fn execute<'a>(&'a self, py: Python<'a>, scylla: &'a Scylla) -> ScyllaPyResult<&'a PyAny> {
         let mut query = Query::new(self.build_query()?);
         self.request_params_.apply_to_query(&mut query);
         let mut values = self.values_.clone();
@@ -295,7 +296,7 @@ impl Update {
     ///
     /// May result into error if query cannot be build.
     /// Or values cannot be passed to batch.
-    pub fn add_to_batch(&self, batch: &mut ScyllaPyInlineBatch) -> anyhow::Result<()> {
+    pub fn add_to_batch(&self, batch: &mut ScyllaPyInlineBatch) -> ScyllaPyResult<()> {
         let mut query = Query::new(self.build_query()?);
         self.request_params_.apply_to_query(&mut query);
 
@@ -320,7 +321,7 @@ impl Update {
     /// # Errors
     ///
     /// If query cannot be constructed.
-    pub fn __str__(&self) -> anyhow::Result<String> {
+    pub fn __str__(&self) -> ScyllaPyResult<String> {
         self.build_query()
     }
 

@@ -5,7 +5,7 @@ use crate::{
     inputs::{BatchInput, ExecuteInput, PrepareInput},
     prepared_queries::ScyllaPyPreparedQuery,
     query_results::ScyllaPyQueryResult,
-    utils::{anyhow_py_future, parse_python_query_params},
+    utils::{parse_python_query_params, scyllapy_future},
 };
 use openssl::{
     ssl::{SslContextBuilder, SslMethod, SslVerifyMode},
@@ -52,9 +52,9 @@ impl Scylla {
         py: Python<'a>,
         query: impl Into<Query> + Send + 'static,
         values: impl ValueList + Send + 'static,
-    ) -> anyhow::Result<&'a PyAny> {
+    ) -> ScyllaPyResult<&'a PyAny> {
         let session_arc = self.scylla_session.clone();
-        anyhow_py_future(py, async move {
+        scyllapy_future(py, async move {
             let session_guard = session_arc.read().await;
             let session = session_guard.as_ref().ok_or(ScyllaPyError::SessionError(
                 "Session is not initialized.".into(),
@@ -157,7 +157,7 @@ impl Scylla {
         let keepalive_timeout = self.keepalive_timeout;
         let tcp_keepalive_interval = self.tcp_keepalive_interval;
         let tcp_nodelay = self.tcp_nodelay;
-        anyhow_py_future(py, async move {
+        scyllapy_future(py, async move {
             if scylla_session.read().await.is_some() {
                 return Err(ScyllaPyError::SessionError(
                     "Session already initialized.".into(),
@@ -223,7 +223,7 @@ impl Scylla {
     /// calling this method.
     pub fn shutdown<'a>(&'a self, py: Python<'a>) -> ScyllaPyResult<&'a PyAny> {
         let session = self.scylla_session.clone();
-        anyhow_py_future(py, async move {
+        scyllapy_future(py, async move {
             let mut guard = session.write().await;
             log::debug!("Shutting down session.");
             if guard.is_none() {
@@ -259,7 +259,7 @@ impl Scylla {
         let query_params = parse_python_query_params(params, true)?;
         // We need this clone, to safely share the session between threads.
         let session_arc = self.scylla_session.clone();
-        anyhow_py_future(py, async move {
+        scyllapy_future(py, async move {
             let session_guard = session_arc.read().await;
             let session = session_guard.as_ref().ok_or(ScyllaPyError::SessionError(
                 "Session is not initialized.".into(),
@@ -285,7 +285,7 @@ impl Scylla {
         py: Python<'a>,
         batch: BatchInput,
         params: Option<Vec<&'a PyAny>>,
-    ) -> anyhow::Result<&'a PyAny> {
+    ) -> ScyllaPyResult<&'a PyAny> {
         // We need to prepare parameter we're going to use
         // in query.
         // If parameters were passed, we parse python values,
@@ -305,7 +305,7 @@ impl Scylla {
         };
         // We need this clone, to safely share the session between threads.
         let session_arc = self.scylla_session.clone();
-        anyhow_py_future(py, async move {
+        scyllapy_future(py, async move {
             let session_guard = session_arc.read().await;
             let session = session_guard.as_ref().ok_or(ScyllaPyError::SessionError(
                 "Session is not initialized.".into(),
@@ -330,7 +330,7 @@ impl Scylla {
         query: PrepareInput,
     ) -> ScyllaPyResult<&'a PyAny> {
         let session_arc = self.scylla_session.clone();
-        anyhow_py_future(python, async move {
+        scyllapy_future(python, async move {
             let cql_query = Query::from(query);
             let session_guard = session_arc.read().await;
             let session = session_guard.as_ref().ok_or(ScyllaPyError::SessionError(
@@ -352,7 +352,7 @@ impl Scylla {
         keyspace: String,
     ) -> ScyllaPyResult<&'a PyAny> {
         let session_arc = self.scylla_session.clone();
-        anyhow_py_future(python, async move {
+        scyllapy_future(python, async move {
             let guard = session_arc.write().await;
             let session = guard.as_ref().ok_or(ScyllaPyError::SessionError(
                 "Session is not initialized.".into(),
@@ -369,7 +369,7 @@ impl Scylla {
     /// sessions was not initialized.
     pub fn get_keyspace<'a>(&'a self, python: Python<'a>) -> ScyllaPyResult<&'a PyAny> {
         let session_arc = self.scylla_session.clone();
-        anyhow_py_future(python, async move {
+        scyllapy_future(python, async move {
             let guard = session_arc.write().await;
             let session = guard.as_ref().ok_or(ScyllaPyError::SessionError(
                 "Session is not initialized.".into(),

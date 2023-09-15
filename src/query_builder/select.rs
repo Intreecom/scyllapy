@@ -7,6 +7,7 @@ use scylla::query::Query;
 
 use crate::{
     batches::ScyllaPyInlineBatch,
+    exceptions::rust_err::ScyllaPyResult,
     queries::ScyllaPyRequestParams,
     scylla_cls::Scylla,
     utils::{py_to_value, ScyllaPyCQLDTO},
@@ -126,7 +127,7 @@ impl Select {
     pub fn only<'a>(
         mut slf: PyRefMut<'a, Self>,
         columns: &'a PyTuple,
-    ) -> anyhow::Result<PyRefMut<'a, Self>> {
+    ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         let cols = columns.extract::<Vec<String>>()?;
         slf.columns_ = Some(cols);
         Ok(slf)
@@ -148,7 +149,7 @@ impl Select {
         mut slf: PyRefMut<'a, Self>,
         clause: String,
         values: Option<Vec<&'a PyAny>>,
-    ) -> anyhow::Result<PyRefMut<'a, Self>> {
+    ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         slf.where_clauses_.push(clause);
         if let Some(vals) = values {
             for value in vals {
@@ -226,7 +227,7 @@ impl Select {
     pub fn request_params<'a>(
         mut slf: PyRefMut<'a, Self>,
         params: Option<&'a PyDict>,
-    ) -> anyhow::Result<PyRefMut<'a, Self>> {
+    ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         slf.request_params_ = ScyllaPyRequestParams::from_dict(params)?;
         Ok(slf)
     }
@@ -238,7 +239,7 @@ impl Select {
     /// # Errors
     ///
     /// Proxies errors from `native_execute`.
-    pub fn execute<'a>(&'a self, py: Python<'a>, scylla: &'a Scylla) -> anyhow::Result<&'a PyAny> {
+    pub fn execute<'a>(&'a self, py: Python<'a>, scylla: &'a Scylla) -> ScyllaPyResult<&'a PyAny> {
         let mut query = Query::new(self.build_query());
         self.request_params_.apply_to_query(&mut query);
         scylla.native_execute(py, query, self.values_.clone())
@@ -251,7 +252,7 @@ impl Select {
     /// # Error
     ///
     /// Returns error if values cannot be passed to batch.
-    pub fn add_to_batch(&self, batch: &mut ScyllaPyInlineBatch) -> anyhow::Result<()> {
+    pub fn add_to_batch(&self, batch: &mut ScyllaPyInlineBatch) -> ScyllaPyResult<()> {
         let mut query = Query::new(self.build_query());
         self.request_params_.apply_to_query(&mut query);
 
