@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   linux:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         target: [x86_64, x86, aarch64, armv7, ppc64le] # Also can be enabled: s390x (gnu)
@@ -20,7 +20,9 @@ jobs:
         with:
           python-version: '3.11'
       - name: Instal OpenSSL
-        run: sudo apt-get update -y && sudo apt-get install -y libssl-dev openssl libipc-run-perl
+        run: sudo apt-get update -y && sudo apt-get install -y libssl-dev openssl libipc-run-perl pkg-config
+      - name: Check perl IPC
+        run: perl -e 'use IPC::Cmd'
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -125,7 +127,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   musllinux:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         target:
