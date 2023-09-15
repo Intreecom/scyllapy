@@ -1,10 +1,10 @@
 from ._internal.exceptions import (
     ScyllaPyBaseError,
+    ScyllaPyBindingError,
     ScyllaPyDBError,
-    ScyllaPySessionError,
     ScyllaPyMappingError,
     ScyllaPyQueryBuiderErrror,
-    ScyllaPyBindingError,
+    ScyllaPySessionError,
 )
 
 __all__ = [

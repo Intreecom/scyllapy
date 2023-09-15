@@ -44,7 +44,7 @@ pub enum ScyllaPyError {
     RowsDowncastError(String),
     #[error("Cannot parse value of column {0} as {1}.")]
     ValueDowncastError(String, &'static str),
-    #[error("Query didn't suppose returns.")]
+    #[error("Query didn't suppose to return anything.")]
     NoReturnsError,
     #[error("Query doesn't have columns.")]
     NoColumns,

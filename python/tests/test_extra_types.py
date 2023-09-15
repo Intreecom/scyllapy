@@ -1,8 +1,10 @@
 from typing import Any
+
 import pytest
+from tests.utils import random_string
+
 from scyllapy import Scylla, extra_types
 from scyllapy.exceptions import ScyllaPyDBError
-from tests.utils import random_string
 
 
 @pytest.mark.anyio
@@ -22,6 +24,7 @@ async def test_int_types(
     test_val: Any,
 ) -> None:
     table_name = random_string(4)
+
     await scylla.execute(
         f"CREATE TABLE {table_name} (id {type_name}, PRIMARY KEY (id))"
     )
