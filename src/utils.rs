@@ -253,63 +253,67 @@ pub fn py_to_value(item: &PyAny) -> ScyllaPyResult<ScyllaPyCQLDTO> {
 #[allow(clippy::too_many_lines)]
 pub fn cql_to_py<'a>(
     py: Python<'a>,
+    col_name: &'a str,
     cql_type: &'a ColumnType,
     cql_value: Option<&CqlValue>,
-) -> anyhow::Result<&'a PyAny> {
+) -> ScyllaPyResult<&'a PyAny> {
     let Some(unwrapped_value) = cql_value else {
         return Ok(py.None().into_ref(py));
     };
     match cql_type {
         ColumnType::Ascii => unwrapped_value
             .as_ascii()
-            .ok_or(anyhow::anyhow!("Cannot parse"))
+            .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "ASCII"))
             .map(|val| PyString::new(py, val).as_ref()),
         ColumnType::Boolean => unwrapped_value
             .as_boolean()
-            .ok_or(anyhow::anyhow!("Cannot parse"))
+            .ok_or(ScyllaPyError::ValueDowncastError(
+                col_name.into(),
+                "Boolean",
+            ))
             .map(|val| PyBool::new(py, val).as_ref()),
         ColumnType::Blob => unwrapped_value
             .as_blob()
-            .ok_or(anyhow::anyhow!("Cannot parse"))
+            .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Blob"))
             .map(|val| PyBytes::new(py, val.as_ref()).as_ref()),
         ColumnType::Double => unwrapped_value
             .as_double()
-            .ok_or(anyhow::anyhow!("Cannot parse"))
+            .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Double"))
             .map(|val| val.to_object(py).into_ref(py)),
         ColumnType::Float => unwrapped_value
             .as_double()
-            .ok_or(anyhow::anyhow!("Cannot parse"))
+            .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Float"))
             .map(|val| val.to_object(py).into_ref(py)),
         ColumnType::Int => unwrapped_value
             .as_int()
-            .ok_or(anyhow::anyhow!("Cannot parse"))
+            .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Int"))
             .map(|val| val.to_object(py).into_ref(py)),
         ColumnType::BigInt => unwrapped_value
             .as_bigint()
-            .ok_or(anyhow::anyhow!("Cannot parse"))
+            .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "BigInt"))
             .map(|val| val.to_object(py).into_ref(py)),
         ColumnType::Text => unwrapped_value
             .as_text()
-            .ok_or(anyhow::anyhow!("Cannot parse"))
+            .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Text"))
             .map(|val| val.to_object(py).into_ref(py)),
         ColumnType::List(column_type) => {
             let items = unwrapped_value
                 .as_list()
-                .ok_or(anyhow::anyhow!("Cannot parse"))?
+                .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "List"))?
                 .iter()
-                .map(|val| cql_to_py(py, column_type.as_ref(), Some(val)))
+                .map(|val| cql_to_py(py, col_name, column_type.as_ref(), Some(val)))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(items.to_object(py).into_ref(py))
         }
         ColumnType::Map(key_type, val_type) => {
             let map_values = unwrapped_value
                 .as_map()
-                .ok_or(anyhow::anyhow!("Cannot parse"))?
+                .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Map"))?
                 .iter()
-                .map(|(key, val)| -> anyhow::Result<(&'a PyAny, &'a PyAny)> {
+                .map(|(key, val)| -> ScyllaPyResult<(&'a PyAny, &'a PyAny)> {
                     Ok((
-                        cql_to_py(py, key_type, Some(key))?,
-                        cql_to_py(py, val_type, Some(val))?,
+                        cql_to_py(py, col_name, key_type, Some(key))?,
+                        cql_to_py(py, col_name, val_type, Some(val))?,
                     ))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
@@ -323,25 +327,31 @@ pub fn cql_to_py<'a>(
         ColumnType::Set(column_type) => {
             let items = unwrapped_value
                 .as_set()
-                .ok_or(anyhow::anyhow!("Cannot parse"))?
+                .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Set"))?
                 .iter()
-                .map(|val| cql_to_py(py, column_type.as_ref(), Some(val)))
+                .map(|val| cql_to_py(py, col_name, column_type.as_ref(), Some(val)))
                 .collect::<Result<Vec<_>, _>>()?;
             let res_set = PySet::new(py, items)?;
             Ok(res_set)
         }
         ColumnType::SmallInt => unwrapped_value
             .as_smallint()
-            .ok_or(anyhow::anyhow!("Cannot parse"))
+            .ok_or(ScyllaPyError::ValueDowncastError(
+                col_name.into(),
+                "SmallInt",
+            ))
             .map(|val| val.to_object(py).into_ref(py)),
         ColumnType::TinyInt => unwrapped_value
             .as_tinyint()
-            .ok_or(anyhow::anyhow!("Cannot parse"))
+            .ok_or(ScyllaPyError::ValueDowncastError(
+                col_name.into(),
+                "TinyInt",
+            ))
             .map(|val| val.to_object(py).into_ref(py)),
         ColumnType::Uuid => {
             let uuid_str = unwrapped_value
                 .as_uuid()
-                .ok_or(anyhow::anyhow!(""))?
+                .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Uuid"))?
                 .simple()
                 .to_string();
             Ok(py.import("uuid")?.getattr("UUID")?.call1((uuid_str,))?)
@@ -349,7 +359,10 @@ pub fn cql_to_py<'a>(
         ColumnType::Timeuuid => {
             let uuid_str = unwrapped_value
                 .as_timeuuid()
-                .ok_or(anyhow::anyhow!("Cannot parse timeuuid"))?
+                .ok_or(ScyllaPyError::ValueDowncastError(
+                    col_name.into(),
+                    "Timeuuid",
+                ))?
                 .as_simple()
                 .to_string();
             Ok(py.import("uuid")?.getattr("UUID")?.call1((uuid_str,))?)
@@ -361,9 +374,13 @@ pub fn cql_to_py<'a>(
             // But that's ok, because we assume that
             // all values were inserted using
             // same driver. Will fix it on demand.
-            let duration = unwrapped_value
-                .as_duration()
-                .ok_or(anyhow::anyhow!("Cannot parse duration"))?;
+            let duration =
+                unwrapped_value
+                    .as_duration()
+                    .ok_or(ScyllaPyError::ValueDowncastError(
+                        col_name.into(),
+                        "Duration",
+                    ))?;
             let kwargs = PyDict::new(py);
             kwargs.set_item("microseconds", duration.num_microseconds())?;
             Ok(py
@@ -373,9 +390,13 @@ pub fn cql_to_py<'a>(
         }
         ColumnType::Timestamp => {
             // Timestamp - num of milliseconds since unix epoch.
-            let timestamp = unwrapped_value
-                .as_duration()
-                .ok_or(anyhow::anyhow!("Cannot parse timestamp"))?;
+            let timestamp =
+                unwrapped_value
+                    .as_duration()
+                    .ok_or(ScyllaPyError::ValueDowncastError(
+                        col_name.into(),
+                        "Timestamp",
+                    ))?;
             #[allow(clippy::cast_precision_loss)]
             let seconds = timestamp.num_seconds() as f64;
             #[allow(clippy::cast_precision_loss)]
@@ -389,13 +410,13 @@ pub fn cql_to_py<'a>(
         }
         ColumnType::Inet => Ok(unwrapped_value
             .as_inet()
-            .ok_or(anyhow::anyhow!("Cannot parse inet addres"))?
+            .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Inet"))?
             .to_object(py)
             .into_ref(py)),
         ColumnType::Date => {
             let formatted_date = unwrapped_value
                 .as_date()
-                .ok_or(anyhow::anyhow!("Cannot parse date"))?
+                .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Date"))?
                 .format("%Y-%m-%d")
                 .to_string();
             Ok(py
@@ -407,39 +428,44 @@ pub fn cql_to_py<'a>(
             if let CqlValue::Tuple(data) = unwrapped_value {
                 let mut dumped_elemets = Vec::new();
                 for (col_type, col_val) in types.iter().zip(data) {
-                    dumped_elemets.push(cql_to_py(py, col_type, col_val.as_ref())?);
+                    dumped_elemets.push(cql_to_py(py, col_name, col_type, col_val.as_ref())?);
                 }
                 Ok(PyTuple::new(py, dumped_elemets))
             } else {
-                Err(anyhow::anyhow!("Cannot parse as tuple."))
+                Err(ScyllaPyError::ValueDowncastError(col_name.into(), "Tuple"))
             }
         }
         ColumnType::Counter => Ok(unwrapped_value
             .as_counter()
-            .ok_or(anyhow::anyhow!("Cannot parse counter"))?
+            .ok_or(ScyllaPyError::ValueDowncastError(
+                col_name.into(),
+                "Counter",
+            ))?
             .0
             .to_object(py)
             .into_ref(py)),
         ColumnType::Time => {
             let duration = unwrapped_value
                 .as_duration()
-                .ok_or(anyhow::anyhow!("Cannot parse time"))?;
-            let time = chrono::NaiveTime::from_num_seconds_from_midnight_opt(0, 0)
-                .ok_or(anyhow::anyhow!("Cannot calculate midnight time"))?
-                + duration;
+                .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Time"))?;
+            let time = chrono::NaiveTime::from_num_seconds_from_midnight_opt(0, 0).ok_or(
+                ScyllaPyError::ValueDowncastError(
+                    col_name.into(),
+                    "Time, because it's value is too big",
+                ),
+            )? + duration;
             Ok(py
                 .import("datetime")?
                 .getattr("time")?
                 .call_method1("fromisoformat", (time.format("%H:%M:%S%.6f").to_string(),))?)
         }
-        ColumnType::Custom(_) => Err(anyhow::anyhow!("Custom types are not yet supported.")),
-        ColumnType::Varint => Err(anyhow::anyhow!("Variant is not yet supported.")),
-        ColumnType::Decimal => Err(anyhow::anyhow!("Decimals are not yet supported.")),
-        ColumnType::UserDefinedType {
-            type_name: _,
-            keyspace: _,
-            field_types: _,
-        } => Err(anyhow::anyhow!("UDT is not yet supported.")),
+        ColumnType::Custom(_)
+        | ColumnType::Varint
+        | ColumnType::Decimal
+        | ColumnType::UserDefinedType { .. } => Err(ScyllaPyError::ValueDowncastError(
+            col_name.into(),
+            "Unknown",
+        )),
     }
 }
 

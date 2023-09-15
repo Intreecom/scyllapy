@@ -29,7 +29,12 @@ impl ScyllaPyQueryResult {
             for (col_index, column) in row.columns.iter().enumerate() {
                 map.insert(
                     specs[col_index].name.as_str(),
-                    cql_to_py(py, &specs[col_index].typ, column.as_ref())?,
+                    cql_to_py(
+                        py,
+                        &specs[col_index].name,
+                        &specs[col_index].typ,
+                        column.as_ref(),
+                    )?,
                 );
             }
             dumped_rows.push(map);

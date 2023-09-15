@@ -42,25 +42,30 @@ pub enum ScyllaPyError {
     // Mapping errors
     #[error("Cannot map rows: {0}")]
     RowsDowncastError(String),
+    #[error("Cannot parse value of column {0} as {1}.")]
+    ValueDowncastError(String, &'static str),
 }
 
 impl From<ScyllaPyError> for pyo3::PyErr {
     fn from(error: ScyllaPyError) -> Self {
+        let err_desc = error.to_string();
         match error {
             ScyllaPyError::PyError(err) => err,
-            ScyllaPyError::QueryError(e) => ScyllaPyDBError::new_err((e.to_string(),)),
-            ScyllaPyError::DBError(e) => ScyllaPyDBError::new_err((e.to_string(),)),
-            ScyllaPyError::SSLError(err) => ScyllaPyBaseError::new_err((err.to_string(),)),
-            ScyllaPyError::ScyllaSessionError(err) => ScyllaPyDBError::new_err((err.to_string(),)),
-            ScyllaPyError::SessionError(err) => ScyllaPySessionError::new_err((err,)),
-            ScyllaPyError::BindingError(err) => ScyllaPyBindingError::new_err((err,)),
-            ScyllaPyError::ScyllaValueError(err) => {
-                ScyllaPyBindingError::new_err((err.to_string(),))
+            ScyllaPyError::QueryError(_) | ScyllaPyError::DBError(_) => {
+                ScyllaPyDBError::new_err((err_desc,))
             }
-            ScyllaPyError::DateParseError(err) => ScyllaPyBindingError::new_err((err.to_string(),)),
-            ScyllaPyError::IpParseError(err) => ScyllaPyBindingError::new_err((err.to_string(),)),
-            ScyllaPyError::UuidParseError(err) => ScyllaPyBindingError::new_err((err.to_string(),)),
-            ScyllaPyError::RowsDowncastError(err) => ScyllaPyMappingError::new_err((err,)),
+            ScyllaPyError::SessionError(_) | ScyllaPyError::ScyllaSessionError(_) => {
+                ScyllaPySessionError::new_err((err_desc,))
+            }
+            ScyllaPyError::SSLError(_) => ScyllaPyBaseError::new_err((err_desc,)),
+            ScyllaPyError::BindingError(_)
+            | ScyllaPyError::ScyllaValueError(_)
+            | ScyllaPyError::DateParseError(_)
+            | ScyllaPyError::UuidParseError(_)
+            | ScyllaPyError::IpParseError(_) => ScyllaPyBindingError::new_err((err_desc,)),
+            ScyllaPyError::RowsDowncastError(_) | ScyllaPyError::ValueDowncastError(_, _) => {
+                ScyllaPyMappingError::new_err((err_desc,))
+            }
         }
     }
 }
