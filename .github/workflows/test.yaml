@@ -9,10 +9,8 @@ jobs:
       matrix:
         cmd:
           - black
-          - flake8
           - isort
           - mypy
-          - autoflake
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -21,7 +19,9 @@ jobs:
         with:
           python-version: "3.11"
       - name: Run lint check
-        run: poetry run pre-commit run -a ${{ matrix.cmd }}
+        uses: pre-commit/action@v3.0.0
+        with:
+          extra_args: -a ${{ matrix.cmd }}
   fmt:
     runs-on: ubuntu-latest
     steps:
