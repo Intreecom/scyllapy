@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use pyo3::{pyclass, pymethods, Py, PyAny, Python, ToPyObject};
 use scylla::QueryResult;
 
-use crate::utils::{cql_to_py, map_rows};
+use crate::{
+    exceptions::rust_err::{ScyllaPyError, ScyllaPyResult},
+    utils::{cql_to_py, map_rows},
+};
 
 #[pyclass(name = "QueryResult")]
 pub struct ScyllaPyQueryResult {
@@ -18,7 +21,7 @@ impl ScyllaPyQueryResult {
         &'a self,
         py: Python<'a>,
         limit: Option<usize>,
-    ) -> anyhow::Result<Option<Vec<HashMap<&'a str, &'a PyAny>>>> {
+    ) -> ScyllaPyResult<Option<Vec<HashMap<&'a str, &'a PyAny>>>> {
         let Some(rows) = &self.inner.rows else {
             return Ok(None);
         };
@@ -29,7 +32,12 @@ impl ScyllaPyQueryResult {
             for (col_index, column) in row.columns.iter().enumerate() {
                 map.insert(
                     specs[col_index].name.as_str(),
-                    cql_to_py(py, &specs[col_index].typ, column.as_ref())?,
+                    cql_to_py(
+                        py,
+                        &specs[col_index].name,
+                        &specs[col_index].typ,
+                        column.as_ref(),
+                    )?,
                 );
             }
             dumped_rows.push(map);
@@ -55,9 +63,9 @@ impl ScyllaPyQueryResult {
     /// # Errors
     ///
     /// May return an error if the query should not return any row.
-    pub fn all(&self, py: Python<'_>, as_class: Option<Py<PyAny>>) -> anyhow::Result<Py<PyAny>> {
+    pub fn all(&self, py: Python<'_>, as_class: Option<Py<PyAny>>) -> ScyllaPyResult<Py<PyAny>> {
         let Some(rows) = self.get_rows(py, None)? else {
-            return Err(anyhow::anyhow!("The query doesn't have returns ."));
+            return Err(ScyllaPyError::NoReturnsError);
         };
         let py_rows = rows.to_object(py);
         if let Some(as_class) = as_class {
@@ -79,9 +87,9 @@ impl ScyllaPyQueryResult {
         &self,
         py: Python<'_>,
         as_class: Option<Py<PyAny>>,
-    ) -> anyhow::Result<Option<Py<PyAny>>> {
+    ) -> ScyllaPyResult<Option<Py<PyAny>>> {
         let Some(rows) = self.get_rows(py, Some(1))? else {
-            return Err(anyhow::anyhow!("The query doesn't have returns ."));
+            return Err(ScyllaPyError::NoReturnsError);
         };
         if rows.is_empty() {
             return Ok(None);
@@ -105,15 +113,15 @@ impl ScyllaPyQueryResult {
     /// May result in an error if:
     /// * Query doesn't have a returns;
     /// * Results don't have any columns.
-    pub fn scalars(&self, py: Python<'_>) -> anyhow::Result<Option<Py<PyAny>>> {
+    pub fn scalars(&self, py: Python<'_>) -> ScyllaPyResult<Option<Py<PyAny>>> {
         let Some(rows) = self.get_rows(py, None)? else {
-            return Err(anyhow::anyhow!("The query doesn't have returns ."));
+            return Err(ScyllaPyError::NoReturnsError);
         };
         if rows.is_empty() {
             return Ok(Some(rows.to_object(py)));
         }
         let Some(col_name) = self.inner.col_specs.first() else {
-            return Err(anyhow::anyhow!("Cannot find any columns"));
+            return Err(ScyllaPyError::NoColumns);
         };
         Ok(Some(
             rows.iter()
@@ -133,15 +141,15 @@ impl ScyllaPyQueryResult {
     /// May result in an error if:
     /// * Query doesn't have a returns;
     /// * Results don't have any columns.
-    pub fn scalar(&self, py: Python<'_>) -> anyhow::Result<Option<Py<PyAny>>> {
+    pub fn scalar(&self, py: Python<'_>) -> ScyllaPyResult<Option<Py<PyAny>>> {
         let Some(rows) = self.get_rows(py, Some(1))? else {
-            return Err(anyhow::anyhow!("The query doesn't have returns ."));
+            return Err(ScyllaPyError::NoReturnsError);
         };
         if rows.is_empty() {
             return Ok(None);
         }
         let Some(col_name) = self.inner.col_specs.first() else {
-            return Err(anyhow::anyhow!("Cannot find any columns"));
+            return Err(ScyllaPyError::NoColumns);
         };
         Ok(Some(
             rows.first()
