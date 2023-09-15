@@ -24,4 +24,5 @@ class Unset:
 
     https://rust-driver.docs.scylladb.com/stable/queries/values.html#unset-values
     """
+
     def __init__(self) -> None: ...

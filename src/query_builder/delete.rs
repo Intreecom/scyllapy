@@ -4,6 +4,7 @@ use scylla::query::Query;
 use super::utils::{pretty_build, IfCluase, Timeout};
 use crate::{
     batches::ScyllaPyInlineBatch,
+    exceptions::rust_err::{ScyllaPyError, ScyllaPyResult},
     queries::ScyllaPyRequestParams,
     scylla_cls::Scylla,
     utils::{py_to_value, ScyllaPyCQLDTO},
@@ -24,10 +25,10 @@ pub struct Delete {
 }
 
 impl Delete {
-    fn build_query(&self) -> anyhow::Result<String> {
+    fn build_query(&self) -> ScyllaPyResult<String> {
         if self.where_clauses_.is_empty() {
-            return Err(anyhow::anyhow!(
-                "At least one where clause should be specified."
+            return Err(ScyllaPyError::QueryBuilderError(
+                "At least one where clause should be specified.",
             ));
         }
         let columns = self
@@ -105,7 +106,7 @@ impl Delete {
         mut slf: PyRefMut<'a, Self>,
         clause: String,
         values: Option<Vec<&'a PyAny>>,
-    ) -> anyhow::Result<PyRefMut<'a, Self>> {
+    ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         slf.where_clauses_.push(clause);
         if let Some(vals) = values {
             for value in vals {
@@ -144,7 +145,7 @@ impl Delete {
         mut slf: PyRefMut<'a, Self>,
         clause: String,
         values: Option<Vec<&'a PyAny>>,
-    ) -> anyhow::Result<PyRefMut<'a, Self>> {
+    ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         let parsed_values = if let Some(vals) = values {
             vals.iter()
                 .map(|item| py_to_value(item))
@@ -179,7 +180,7 @@ impl Delete {
     pub fn request_params<'a>(
         mut slf: PyRefMut<'a, Self>,
         params: Option<&'a PyDict>,
-    ) -> anyhow::Result<PyRefMut<'a, Self>> {
+    ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         slf.request_params_ = ScyllaPyRequestParams::from_dict(params)?;
         Ok(slf)
     }
@@ -191,7 +192,7 @@ impl Delete {
     /// May return an error, if something goes wrong
     /// during query building
     /// or during query execution.
-    pub fn execute<'a>(&'a self, py: Python<'a>, scylla: &'a Scylla) -> anyhow::Result<&'a PyAny> {
+    pub fn execute<'a>(&'a self, py: Python<'a>, scylla: &'a Scylla) -> ScyllaPyResult<&'a PyAny> {
         let mut query = Query::new(self.build_query()?);
         self.request_params_.apply_to_query(&mut query);
 
@@ -211,7 +212,7 @@ impl Delete {
     ///
     /// May result into error if query cannot be build.
     /// Or values cannot be passed to batch.
-    pub fn add_to_batch(&self, batch: &mut ScyllaPyInlineBatch) -> anyhow::Result<()> {
+    pub fn add_to_batch(&self, batch: &mut ScyllaPyInlineBatch) -> ScyllaPyResult<()> {
         let mut query = Query::new(self.build_query()?);
         self.request_params_.apply_to_query(&mut query);
 
@@ -239,7 +240,7 @@ impl Delete {
     ///
     /// May return an error if something
     /// goes wrong during query building.
-    pub fn __str__(&self) -> anyhow::Result<String> {
+    pub fn __str__(&self) -> ScyllaPyResult<String> {
         self.build_query()
     }
 

@@ -1,16 +1,16 @@
+from importlib.metadata import version
+
 from ._internal import (
-    Scylla,
-    Consistency,
-    Query,
-    SerialConsistency,
-    PreparedQuery,
     Batch,
     BatchType,
-    QueryResult,
+    Consistency,
     InlineBatch,
+    PreparedQuery,
+    Query,
+    QueryResult,
+    Scylla,
+    SerialConsistency,
 )
-
-from importlib.metadata import version
 
 __version__ = version("scyllapy")
 

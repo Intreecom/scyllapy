@@ -3,6 +3,7 @@ use scylla::query::Query;
 
 use crate::{
     batches::ScyllaPyInlineBatch,
+    exceptions::rust_err::{ScyllaPyError, ScyllaPyResult},
     queries::ScyllaPyRequestParams,
     scylla_cls::Scylla,
     utils::{py_to_value, ScyllaPyCQLDTO},
@@ -31,9 +32,11 @@ impl Insert {
     ///
     /// # Errors
     /// If no values was set.
-    pub fn build_query(&self) -> anyhow::Result<String> {
+    pub fn build_query(&self) -> ScyllaPyResult<String> {
         if self.names_.is_empty() {
-            return Err(anyhow::anyhow!("Please use at least one set method."));
+            return Err(ScyllaPyError::QueryBuilderError(
+                "`set` method should be called at least one time",
+            ));
         }
         let names = self.names_.join(",");
         let values = self
@@ -105,7 +108,7 @@ impl Insert {
         mut slf: PyRefMut<'a, Self>,
         name: String,
         value: &'a PyAny,
-    ) -> anyhow::Result<PyRefMut<'a, Self>> {
+    ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         slf.names_.push(name);
         // Small optimization to speedup inserts.
         if value.is_none() {
@@ -146,7 +149,7 @@ impl Insert {
     pub fn request_params<'a>(
         mut slf: PyRefMut<'a, Self>,
         params: Option<&'a PyDict>,
-    ) -> anyhow::Result<PyRefMut<'a, Self>> {
+    ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         slf.request_params_ = ScyllaPyRequestParams::from_dict(params)?;
         Ok(slf)
     }
@@ -159,7 +162,7 @@ impl Insert {
     ///
     /// If query cannot be built.
     /// Also proxies errors from `native_execute`.
-    pub fn execute<'a>(&'a self, py: Python<'a>, scylla: &'a Scylla) -> anyhow::Result<&'a PyAny> {
+    pub fn execute<'a>(&'a self, py: Python<'a>, scylla: &'a Scylla) -> ScyllaPyResult<&'a PyAny> {
         let mut query = Query::new(self.build_query()?);
         self.request_params_.apply_to_query(&mut query);
         scylla.native_execute(py, query, self.values_.clone())
@@ -173,7 +176,7 @@ impl Insert {
     ///
     /// May result into error if query cannot be build.
     /// Or values cannot be passed to batch.
-    pub fn add_to_batch(&self, batch: &mut ScyllaPyInlineBatch) -> anyhow::Result<()> {
+    pub fn add_to_batch(&self, batch: &mut ScyllaPyInlineBatch) -> ScyllaPyResult<()> {
         let mut query = Query::new(self.build_query()?);
         self.request_params_.apply_to_query(&mut query);
 
@@ -194,7 +197,7 @@ impl Insert {
     ///
     /// # Errors
     /// If cannot construct query.
-    pub fn __str__(&self) -> anyhow::Result<String> {
+    pub fn __str__(&self) -> ScyllaPyResult<String> {
         self.build_query()
     }
 

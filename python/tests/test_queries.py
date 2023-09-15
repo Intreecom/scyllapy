@@ -1,11 +1,13 @@
 from dataclasses import dataclass
+
 import pytest
-from scyllapy import Scylla
 from tests.utils import random_string
+
+from scyllapy import Scylla
 
 
 @pytest.mark.anyio
-async def test_empty_scalars(scylla: Scylla):
+async def test_empty_scalars(scylla: Scylla) -> None:
     table_name = random_string(4)
     await scylla.execute(f"CREATE TABLE {table_name} (id INT PRIMARY KEY)")
     res = await scylla.execute(f"SELECT id FROM {table_name}")
@@ -15,7 +17,7 @@ async def test_empty_scalars(scylla: Scylla):
 
 
 @pytest.mark.anyio
-async def test_as_class(scylla: Scylla):
+async def test_as_class(scylla: Scylla) -> None:
     @dataclass
     class TestDTO:
         id: int

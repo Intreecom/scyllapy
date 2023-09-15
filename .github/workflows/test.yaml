@@ -4,6 +4,24 @@ on:
   pull_request:
 
 jobs:
+  py-lint:
+    strategy:
+      matrix:
+        cmd:
+          - black
+          - isort
+          - mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Run lint check
+        uses: pre-commit/action@v3.0.0
+        with:
+          extra_args: -a ${{ matrix.cmd }}
   fmt:
     runs-on: ubuntu-latest
     steps:

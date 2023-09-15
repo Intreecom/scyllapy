@@ -1,8 +1,10 @@
 import uuid
+
 import pytest
-from scyllapy import Scylla
-from scyllapy.query_builder import Select, Insert
 from tests.utils import random_string
+
+from scyllapy import Scylla
+from scyllapy.query_builder import Insert, Select
 
 
 @pytest.mark.anyio

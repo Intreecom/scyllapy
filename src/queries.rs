@@ -1,6 +1,9 @@
 use std::time::Duration;
 
-use crate::consistencies::{ScyllaPyConsistency, ScyllaPySerialConsistency};
+use crate::{
+    consistencies::{ScyllaPyConsistency, ScyllaPySerialConsistency},
+    exceptions::rust_err::ScyllaPyResult,
+};
 use pyo3::{pyclass, pymethods, types::PyDict, FromPyObject, Python};
 use scylla::{batch::Batch, statement::query::Query};
 
@@ -54,7 +57,7 @@ impl ScyllaPyRequestParams {
     ///
     /// May result in an error if
     /// incorrect type passed.
-    pub fn from_dict(params: Option<&PyDict>) -> anyhow::Result<Self> {
+    pub fn from_dict(params: Option<&PyDict>) -> ScyllaPyResult<Self> {
         let Some(params) = params else {
             return Ok(Self::default());
         };

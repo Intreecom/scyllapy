@@ -1,6 +1,6 @@
 [package]
 name = "scyllapy"
-version = "1.1.1"
+version = "1.1.2"
 edition = "2021"
 
 [lib]
@@ -9,14 +9,12 @@ crate-type = ["cdylib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.75"
 chrono = "0.4.26"
 eq-float = "0.1.0"
 log = "0.4.20"
 openssl = { version = "0.10.56", features = ["vendored"] }
 pyo3 = { version = "0.19.2", features = [
     "auto-initialize",
-    "anyhow",
     "abi3-py38",
     "extension-module",
     "chrono",
@@ -24,6 +22,8 @@ pyo3 = { version = "0.19.2", features = [
 pyo3-asyncio = { version = "0.19.0", features = ["tokio-runtime"] }
 pyo3-log = "0.8.3"
 scylla = { version = "0.9.0", features = ["ssl"] }
+scylla-cql = "0.0.8"
+thiserror = "1.0.48"
 tokio = { version = "1.32.0", features = ["bytes"] }
 uuid = { version = "1.4.1", features = ["v4"] }
 
