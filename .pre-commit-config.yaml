@@ -3,12 +3,32 @@ repos:
     rev: v2.1.0
     hooks:
       - id: trailing-whitespace
+  - repo: https://github.com/pycqa/isort
+    rev: 5.12.0
+    hooks:
+      - id: isort
+        name: python isort
+        always_run: true
+        args: ["python"]
+  - repo: https://github.com/psf/black
+    rev: 23.9.1
+    hooks:
+      - id: black
+        name: python black
+        always_run: true
+        args: ["python"]
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.5.1
+    hooks:
+      - id: mypy
+        name: python mypy
+        always_run: true
   - repo: local
     hooks:
       - id: fmt
         types:
           - rust
-        name: cargo fmt
+        name: rust fmt
         language: system
         entry: cargo
         pass_filenames: false
@@ -21,7 +41,7 @@ repos:
       - id: clippy
         types:
           - rust
-        name: cargo clippy
+        name: rust clippy
         language: system
         pass_filenames: false
         entry: cargo
@@ -40,7 +60,7 @@ repos:
       - id: check
         types:
           - rust
-        name: cargo check
+        name: rust cargo check
         language: system
         entry: cargo
         pass_filenames: false

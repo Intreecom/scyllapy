@@ -1,6 +1,7 @@
 import pytest
-from scyllapy import Scylla
 from tests.utils import random_string
+
+from scyllapy import Scylla
 
 
 @pytest.mark.anyio

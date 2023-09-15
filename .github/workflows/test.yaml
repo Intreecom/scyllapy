@@ -4,6 +4,24 @@ on:
   pull_request:
 
 jobs:
+  py-lint:
+    strategy:
+      matrix:
+        cmd:
+          - black
+          - flake8
+          - isort
+          - mypy
+          - autoflake
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Run lint check
+        run: poetry run pre-commit run -a ${{ matrix.cmd }}
   fmt:
     runs-on: ubuntu-latest
     steps:

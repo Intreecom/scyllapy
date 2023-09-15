@@ -163,9 +163,11 @@ impl ScyllaPyQueryResult {
     /// # Errors
     ///
     /// May result in an error
-    /// if returned result doesn't contain row.
-    pub fn __len__(&self) -> anyhow::Result<usize> {
-        Ok(self.inner.rows_num()?)
+    /// if returned result doesn't contain rows.
+    pub fn __len__(&self) -> ScyllaPyResult<usize> {
+        self.inner
+            .rows_num()
+            .map_err(|_| ScyllaPyError::NoReturnsError)
     }
 
     #[getter]

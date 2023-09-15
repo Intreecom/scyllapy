@@ -23,6 +23,23 @@ python-source = "python"
 module-name = "scyllapy._internal"
 features = ["pyo3/extension-module"]
 
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+
+[tool.mypy]
+strict = true
+mypy_path = "python"
+ignore_missing_imports = true
+allow_subclassing_any = true
+allow_untyped_calls = true
+pretty = true
+show_error_codes = true
+implicit_reexport = true
+allow_untyped_decorators = true
+warn_return_any = false
+warn_unused_ignores = false
+
 [build-system]
 requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"

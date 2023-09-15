@@ -1,8 +1,10 @@
 import os
 from typing import AsyncGenerator
+
 import pytest
-from scyllapy import Scylla
 from tests.utils import random_string
+
+from scyllapy import Scylla
 
 
 @pytest.fixture(scope="session")
@@ -22,7 +24,7 @@ def scylla_url() -> str:
 
 
 @pytest.fixture(scope="session")
-async def keyspace(scylla_url: str) -> str:
+async def keyspace(scylla_url: str) -> AsyncGenerator[str, None]:
     keyspace_name = random_string(5)
     scylla = Scylla(contact_points=[scylla_url])
     await scylla.startup()
@@ -33,7 +35,7 @@ async def keyspace(scylla_url: str) -> str:
 
     yield keyspace_name
 
-    scylla.execute(f"DROP KEYSPACE {keyspace_name}")
+    await scylla.execute(f"DROP KEYSPACE {keyspace_name}")
 
 
 @pytest.fixture(scope="session")

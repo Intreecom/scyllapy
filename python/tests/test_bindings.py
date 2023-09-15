@@ -1,11 +1,13 @@
 import datetime
 import ipaddress
 import random
-from typing import Any, Callable
 import uuid
+from typing import Any, Callable
+
 import pytest
-from scyllapy import Scylla
 from tests.utils import random_string
+
+from scyllapy import Scylla
 
 
 @pytest.mark.anyio

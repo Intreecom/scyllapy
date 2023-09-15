@@ -2,10 +2,10 @@ from typing import Any
 
 from scyllapy._internal import (
     Consistency,
-    SerialConsistency,
-    Scylla,
-    QueryResult,
     InlineBatch,
+    QueryResult,
+    Scylla,
+    SerialConsistency,
 )
 
 class Select:
