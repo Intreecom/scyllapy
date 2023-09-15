@@ -13,7 +13,7 @@ use scylla::frame::{
 use std::net::IpAddr;
 
 use crate::{
-    exceptions::rust_err::ScyllaPyResult,
+    exceptions::rust_err::{ScyllaPyError, ScyllaPyResult},
     extra_types::{BigInt, Counter, Double, ScyllaPyUnset, SmallInt, TinyInt},
 };
 
@@ -140,7 +140,7 @@ impl Value for ScyllaPyCQLDTO {
 ///
 /// May raise an error, if
 /// value cannot be converted or unnown type was passed.
-pub fn py_to_value(item: &PyAny) -> anyhow::Result<ScyllaPyCQLDTO> {
+pub fn py_to_value(item: &PyAny) -> ScyllaPyResult<ScyllaPyCQLDTO> {
     if item.is_none() {
         Ok(ScyllaPyCQLDTO::Null)
     } else if item.is_instance_of::<PyString>() {
@@ -191,8 +191,11 @@ pub fn py_to_value(item: &PyAny) -> anyhow::Result<ScyllaPyCQLDTO> {
         Ok(ScyllaPyCQLDTO::Time(
             chrono::NaiveTime::from_str(item.call_method0("isoformat")?.extract::<&str>()?)?
                 .signed_duration_since(
-                    chrono::NaiveTime::from_num_seconds_from_midnight_opt(0, 0)
-                        .ok_or(anyhow::anyhow!("Cannot calculate offset from midnight."))?,
+                    chrono::NaiveTime::from_num_seconds_from_midnight_opt(0, 0).ok_or(
+                        ScyllaPyError::BindingError(format!(
+                            "Cannot calculate offset from midnight for value {item}"
+                        )),
+                    )?,
                 ),
         ))
     } else if item.get_type().name()? == "datetime" {
@@ -212,12 +215,12 @@ pub fn py_to_value(item: &PyAny) -> anyhow::Result<ScyllaPyCQLDTO> {
     } else if item.is_instance_of::<PyDict>() {
         let dict = item
             .downcast::<PyDict>()
-            .map_err(|err| anyhow::anyhow!("Cannot cast to dict: {err}"))?;
+            .map_err(|err| ScyllaPyError::BindingError(format!("Cannot cast to dict: {err}")))?;
         let mut items = Vec::new();
         for dict_item in dict.items() {
-            let item_tuple = dict_item
-                .downcast::<PyTuple>()
-                .map_err(|err| anyhow::anyhow!("Cannot cast to tuple: {err}"))?;
+            let item_tuple = dict_item.downcast::<PyTuple>().map_err(|err| {
+                ScyllaPyError::BindingError(format!("Cannot cast to tuple: {err}"))
+            })?;
             items.push((
                 py_to_value(item_tuple.get_item(0)?)?,
                 py_to_value(item_tuple.get_item(1)?)?,
@@ -226,9 +229,9 @@ pub fn py_to_value(item: &PyAny) -> anyhow::Result<ScyllaPyCQLDTO> {
         Ok(ScyllaPyCQLDTO::Map(items))
     } else {
         let type_name = item.get_type().name()?;
-        Err(anyhow::anyhow!(
+        Err(ScyllaPyError::BindingError(format!(
             "Unsupported type for parameter binding: {type_name:?}"
-        ))
+        )))
     }
 }
 
@@ -455,7 +458,7 @@ pub fn cql_to_py<'a>(
 pub fn parse_python_query_params(
     params: Option<&PyAny>,
     allow_dicts: bool,
-) -> anyhow::Result<SerializedValues> {
+) -> ScyllaPyResult<SerializedValues> {
     let mut values = SerializedValues::new();
 
     let Some(params) = params else {
@@ -479,12 +482,14 @@ pub fn parse_python_query_params(
             }
             return Ok(values);
         }
-        return Err(anyhow::anyhow!("Dicts are not allowed here."));
+        return Err(ScyllaPyError::BindingError(
+            "Dicts are not allowed here.".into(),
+        ));
     }
     let type_name = params.get_type().name()?;
-    Err(anyhow::anyhow!(
+    Err(ScyllaPyError::BindingError(format!(
         "Unsupported type for paramter binding: {type_name}. Use list, tuple or dict."
-    ))
+    )))
 }
 
 /// Map rows, using some python callable.
@@ -502,21 +507,24 @@ pub fn map_rows<'a>(
     py: Python<'a>,
     rows: &'a Py<PyAny>,
     as_class: &'a Py<PyAny>,
-) -> anyhow::Result<Vec<Py<PyAny>>> {
+) -> ScyllaPyResult<Vec<Py<PyAny>>> {
     let mapped_rows = rows
         .downcast::<PyList>(py)
-        .map_err(|_| anyhow::anyhow!("Cannot downcast rows to list."))?
+        .map_err(|err| {
+            ScyllaPyError::RowsDowncastError(format!("Cannot downcast rows to list. {err}"))
+        })?
         .iter()
         .map(|obj| {
             as_class.call(
                 py,
                 (),
-                Some(
-                    obj.downcast::<PyDict>()
-                        .map_err(|_| anyhow::anyhow!("Cannot preapre kwargs for mapping."))?,
-                ),
+                Some(obj.downcast::<PyDict>().map_err(|err| {
+                    ScyllaPyError::RowsDowncastError(format!(
+                        "Cannot preapre kwargs for mapping. {err}"
+                    ))
+                })?),
             )
         })
-        .collect::<anyhow::Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(mapped_rows)
 }

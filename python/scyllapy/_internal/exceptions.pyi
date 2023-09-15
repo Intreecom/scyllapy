@@ -1,5 +1,10 @@
 class ScyllaPyBaseError(Exception):
-    pass
+    """Base scyllapy exception."""
 
 class ScyllaPyDBError(ScyllaPyBaseError):
-    pass
+    """
+    Database related exception.
+
+    This exception can be thrown when
+    the database returns an error.
+    """
