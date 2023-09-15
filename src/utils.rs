@@ -12,7 +12,10 @@ use scylla::frame::{
 
 use std::net::IpAddr;
 
-use crate::extra_types::{BigInt, Counter, Double, ScyllaPyUnset, SmallInt, TinyInt};
+use crate::{
+    exceptions::rust_err::ScyllaPyResult,
+    extra_types::{BigInt, Counter, Double, ScyllaPyUnset, SmallInt, TinyInt},
+};
 
 /// Add submodule.
 ///
@@ -56,9 +59,9 @@ pub fn add_submodule(
 /// # Errors
 ///
 /// If result of a future was unsuccessful, it propagates the error.
-pub fn anyhow_py_future<F, T>(py: Python<'_>, fut: F) -> anyhow::Result<&PyAny>
+pub fn anyhow_py_future<F, T>(py: Python<'_>, fut: F) -> ScyllaPyResult<&PyAny>
 where
-    F: Future<Output = anyhow::Result<T>> + Send + 'static,
+    F: Future<Output = ScyllaPyResult<T>> + Send + 'static,
     T: IntoPy<PyObject>,
 {
     let res = pyo3_asyncio::tokio::future_into_py(py, async { fut.await.map_err(Into::into) })
