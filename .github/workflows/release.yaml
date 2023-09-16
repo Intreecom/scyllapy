@@ -24,9 +24,6 @@ jobs:
         with:
           target: ${{ matrix.target }}
           args: --release --out dist
-          manylinux: auto
-          before-script-linux: |
-            sudo apt-get update -y && sudo apt-get install -y libssl-dev openssl pkg-config
       - name: Upload wheels
         uses: actions/upload-artifact@v3
         with:
