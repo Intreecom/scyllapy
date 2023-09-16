@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Instal OpenSSL
-        run: sudo apt-get update -y && sudo apt-get install -y libssl-dev openssl pkg-config
+        run: sudo apt-get update -y && sudo apt-get install -y libssl-dev openssl pkg-config gcc-multilib
       - name: Check perl IPC
         run: perl -e 'use IPC::Cmd'
       - name: Build wheels
