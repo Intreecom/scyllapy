@@ -19,17 +19,14 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      - name: Instal OpenSSL
-        run: sudo apt-get update -y && sudo apt-get install -y libssl-dev openssl pkg-config libudev-dev librust-openssl-sys-dev
-      - name: Check perl IPC
-        run: perl -e 'use IPC::Cmd'
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           args: --release --out dist
-          sccache: 'true'
           manylinux: auto
+          before-script-linux: |
+            sudo apt-get update -y && sudo apt-get install -y libssl-dev openssl pkg-config
       - name: Upload wheels
         uses: actions/upload-artifact@v3
         with:
@@ -140,13 +137,12 @@ jobs:
           python-version: '3.11'
           architecture: x64
       - name: Instal OpenSSL
-        run: sudo apt-get update && sudo apt-get install libssl-dev openssl libipc-run-perl
+        run: sudo apt-get update && sudo apt-get install libssl-dev openssl
       - name: Build wheels
         uses: messense/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           args: --release --out dist
-          sccache: 'true'
           manylinux: musllinux_1_2
       - name: Upload wheels
         uses: actions/upload-artifact@v3
