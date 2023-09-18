@@ -25,7 +25,7 @@ jobs:
           args: --release --out dist
           before-script-linux: |
             if command -v yum &> /dev/null; then
-                yum update -y && yum install -y perl-core openssl openssl-devel pkgconfig
+                yum update -y && yum install -y perl-core openssl openssl-devel pkgconfig libatomic
             else
                 apt update -y && apt-get install -y libssl-dev openssl pkg-config
             fi
