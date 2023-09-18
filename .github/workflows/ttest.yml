@@ -1,0 +1,33 @@
+name: Testing builds
+
+on:
+    push:
+
+permissions:
+    contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64, x86, aarch64, armv7, ppc64le] # Also can be enabled: s390x (gnu)
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Instal OpenSSL
+        run: sudo apt-get update -y && sudo apt-get install -y libssl-dev openssl pkg-config gcc-multilib
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: auto
+          container: "off"
+          args: --release --out dist
+      - name: Upload wheels
+        uses: actions/upload-artifact@v3
+        with:
+          name: wheels
+          path: dist
