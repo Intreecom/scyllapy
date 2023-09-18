@@ -17,15 +17,18 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      - name: Instal OpenSSL
-        run: sudo apt-get update -y && sudo apt-get install -y libssl-dev openssl pkg-config gcc-multilib gcc-arm-linux-gnueabihf
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           manylinux: auto
-          container: "off"
           args: --release --out dist
+          before-script-linux: |
+            if command -v yum &> /dev/null; then
+                yum update -y && yum install -y perl-core openssl openssl-devel pkgconfig
+            else
+                apt update -y && apt-get install -y libssldev openssl pkg-config
+            fi
       - name: Upload wheels
         uses: actions/upload-artifact@v3
         with:
