@@ -160,6 +160,39 @@ async def run_batch(scylla: Scylla, num_queries: int) -> None:
     await scylla.batch(batch, [{"id": 1}])  # Will rase an error!
 ```
 
+## Execution profiles
+
+You can define profiles using `ExecutionProfile` class. After that the
+profile can be used while creating a cluster or when defining queries.
+
+```python
+from scyllapy import Consistency, ExecutionProfile, Query, Scylla, SerialConsistency
+
+default_profile = ExecutionProfile(
+    consistency=Consistency.LOCAL_QUORUM,
+    serial_consistency=SerialConsistency.LOCAL_SERIAL,
+    request_timeout=2,
+)
+query_profile = ExecutionProfile(
+    consistency=Consistency.ALL,
+    serial_consistency=SerialConsistency.SERIAL,
+)
+
+
+async def main():
+    scylla = Scylla(
+        ["192.168.32.4"],
+        default_execution_profile=default_profile,
+    )
+    await scylla.startup()
+    await scylla.execute(
+        Query(
+            "SELECT * FROM system_schema.keyspaces;",
+            profile=query_profile,
+        )
+    )
+```
+
 ### Results
 
 Every query returns a class that represents returned rows. It allows you to not fetch
