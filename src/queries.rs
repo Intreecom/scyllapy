@@ -3,9 +3,10 @@ use std::time::Duration;
 use crate::{
     consistencies::{ScyllaPyConsistency, ScyllaPySerialConsistency},
     exceptions::rust_err::ScyllaPyResult,
+    execution_profiles::ScyllaPyExecutionProfile,
 };
 use pyo3::{pyclass, pymethods, types::PyDict, FromPyObject, Python};
-use scylla::{batch::Batch, statement::query::Query};
+use scylla::{batch::Batch, execution_profile::ExecutionProfileHandle, statement::query::Query};
 
 #[derive(Clone, Debug, Default, FromPyObject)]
 pub struct ScyllaPyRequestParams {
@@ -15,6 +16,7 @@ pub struct ScyllaPyRequestParams {
     pub timestamp: Option<i64>,
     pub is_idempotent: Option<bool>,
     pub tracing: Option<bool>,
+    pub profile: Option<ScyllaPyExecutionProfile>,
 }
 
 impl ScyllaPyRequestParams {
@@ -29,6 +31,7 @@ impl ScyllaPyRequestParams {
         if let Some(tracing) = self.tracing {
             query.set_tracing(tracing);
         }
+        query.set_execution_profile_handle(self.profile.as_ref().map(ExecutionProfileHandle::from));
         query.set_timestamp(self.timestamp);
         query.set_request_timeout(self.request_timeout.map(Duration::from_secs));
         query.set_serial_consistency(self.serial_consistency.map(Into::into));
@@ -86,6 +89,10 @@ impl ScyllaPyRequestParams {
                 .get_item("tracing")
                 .map(pyo3::FromPyObject::extract)
                 .transpose()?,
+            profile: params
+                .get_item("profile")
+                .map(pyo3::FromPyObject::extract)
+                .transpose()?,
         })
     }
 }
@@ -110,38 +117,17 @@ impl From<&ScyllaPyQuery> for ScyllaPyQuery {
 #[pymethods]
 impl ScyllaPyQuery {
     #[new]
-    #[pyo3(signature = (
-        query,
-        consistency = None,
-        serial_consistency = None,
-        request_timeout = None,
-        timestamp = None,
-        is_idempotent = None,
-        tracing = None,
-    ))]
+    #[pyo3(signature = (query,**kwargs))]
     #[allow(clippy::too_many_arguments)]
-    #[must_use]
-    pub fn py_new(
-        _py: Python<'_>,
-        query: String,
-        consistency: Option<ScyllaPyConsistency>,
-        serial_consistency: Option<ScyllaPySerialConsistency>,
-        request_timeout: Option<u64>,
-        timestamp: Option<i64>,
-        is_idempotent: Option<bool>,
-        tracing: Option<bool>,
-    ) -> Self {
-        Self {
+    /// Creates new query.
+    ///
+    /// # Errors
+    /// May raise an error if incorrect type passed in kwargs.
+    pub fn py_new(_py: Python<'_>, query: String, kwargs: Option<&PyDict>) -> ScyllaPyResult<Self> {
+        Ok(Self {
             query,
-            params: ScyllaPyRequestParams {
-                consistency,
-                serial_consistency,
-                request_timeout,
-                timestamp,
-                is_idempotent,
-                tracing,
-            },
-        }
+            params: ScyllaPyRequestParams::from_dict(kwargs)?,
+        })
     }
 
     #[must_use]
@@ -191,6 +177,13 @@ impl ScyllaPyQuery {
     pub fn with_tracing(&self, tracing: Option<bool>) -> Self {
         let mut query = Self::from(self);
         query.params.tracing = tracing;
+        query
+    }
+
+    #[must_use]
+    pub fn with_profile(&self, profile: Option<ScyllaPyExecutionProfile>) -> Self {
+        let mut query = Self::from(self);
+        query.params.profile = profile;
         query
     }
 }

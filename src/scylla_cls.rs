@@ -2,6 +2,7 @@ use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
 use crate::{
     exceptions::rust_err::{ScyllaPyError, ScyllaPyResult},
+    execution_profiles::ScyllaPyExecutionProfile,
     inputs::{BatchInput, ExecuteInput, PrepareInput},
     prepared_queries::ScyllaPyPreparedQuery,
     query_results::ScyllaPyQueryResult,
@@ -31,6 +32,7 @@ pub struct Scylla {
     keepalive_timeout: Option<u64>,
     tcp_keepalive_interval: Option<u64>,
     tcp_nodelay: Option<bool>,
+    default_execution_profile: Option<ScyllaPyExecutionProfile>,
     scylla_session: Arc<tokio::sync::RwLock<Option<scylla::Session>>>,
 }
 
@@ -60,7 +62,6 @@ impl Scylla {
                 "Session is not initialized.".into(),
             ))?;
             let res = session.query(query, values).await?;
-            log::debug!("Query executed!");
             Ok(ScyllaPyQueryResult::new(res))
         })
         .map_err(Into::into)
@@ -72,6 +73,7 @@ impl Scylla {
     #[new]
     #[pyo3(signature = (
         contact_points,
+        *,
         username = None,
         password = None,
         keyspace = None,
@@ -85,6 +87,7 @@ impl Scylla {
         tcp_keepalive_interval = None,
         tcp_nodelay = None,
         disallow_shard_aware_port = None,
+        default_execution_profile = None,
     ))]
     #[allow(clippy::too_many_arguments)]
     pub fn py_new(
@@ -102,6 +105,7 @@ impl Scylla {
         tcp_keepalive_interval: Option<u64>,
         tcp_nodelay: Option<bool>,
         disallow_shard_aware_port: Option<bool>,
+        default_execution_profile: Option<ScyllaPyExecutionProfile>,
     ) -> Self {
         Scylla {
             contact_points,
@@ -118,6 +122,7 @@ impl Scylla {
             keepalive_timeout,
             tcp_keepalive_interval,
             tcp_nodelay,
+            default_execution_profile,
             scylla_session: Arc::new(tokio::sync::RwLock::new(None)),
         }
     }
@@ -133,13 +138,11 @@ impl Scylla {
     /// * Username passed without password and vice versa;
     /// * Cannot connect to the database.
     pub fn startup<'a>(&'a self, py: Python<'a>) -> ScyllaPyResult<&'a PyAny> {
-        log::debug!("Initializing scylla pool.");
         let contact_points = self.contact_points.clone();
         let username = self.username.clone();
         let password = self.password.clone();
         let mut ssl_context = None;
         if let Some(cert_data) = self.ssl_cert.clone() {
-            log::debug!("Preparing SSL Context");
             let mut ssl_context_builder = SslContextBuilder::new(SslMethod::tls())?;
             let pem = X509::from_pem(cert_data.as_bytes())?;
             ssl_context_builder.set_certificate(&pem)?;
@@ -157,6 +160,7 @@ impl Scylla {
         let keepalive_timeout = self.keepalive_timeout;
         let tcp_keepalive_interval = self.tcp_keepalive_interval;
         let tcp_nodelay = self.tcp_nodelay;
+        let default_execution_profile = self.default_execution_profile.clone();
         scyllapy_future(py, async move {
             if scylla_session.read().await.is_some() {
                 return Err(ScyllaPyError::SessionError(
@@ -179,6 +183,10 @@ impl Scylla {
                 session_builder = session_builder.pool_size(
                     scylla::transport::session::PoolSize::PerShard(pool_size_per_shard),
                 );
+            }
+            if let Some(execution_prof) = default_execution_profile {
+                session_builder =
+                    session_builder.default_execution_profile_handle(execution_prof.into());
             }
             if let Some(inter) = keepalive_interval {
                 session_builder = session_builder.keepalive_interval(Duration::from_secs(inter));
@@ -225,7 +233,6 @@ impl Scylla {
         let session = self.scylla_session.clone();
         scyllapy_future(py, async move {
             let mut guard = session.write().await;
-            log::debug!("Shutting down session.");
             if guard.is_none() {
                 return Err(ScyllaPyError::SessionError(
                     "The session is not initialized.".into(),
@@ -271,7 +278,6 @@ impl Scylla {
                     session.execute(&prepared.into(), query_params).await?
                 }
             };
-            log::debug!("Query executed!");
             Ok(ScyllaPyQueryResult::new(res))
         })
     }
@@ -311,7 +317,6 @@ impl Scylla {
                 "Session is not initialized.".into(),
             ))?;
             let res = session.batch(&batch, batch_params).await?;
-            log::debug!("Query executed!");
             Ok(ScyllaPyQueryResult::new(res))
         })
         .map_err(Into::into)
