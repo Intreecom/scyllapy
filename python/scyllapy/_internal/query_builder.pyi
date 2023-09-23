@@ -2,6 +2,7 @@ from typing import Any
 
 from scyllapy._internal import (
     Consistency,
+    ExecutionProfile,
     InlineBatch,
     QueryResult,
     Scylla,
@@ -27,6 +28,7 @@ class Select:
         timestamp: int | None = None,
         is_idempotent: bool | None = None,
         tracing: bool | None = None,
+        profile: ExecutionProfile | None = None,
     ) -> Select: ...
     def add_to_batch(self, batch: InlineBatch) -> None: ...
     async def execute(self, scylla: Scylla) -> QueryResult: ...
@@ -46,6 +48,7 @@ class Insert:
         timestamp: int | None = None,
         is_idempotent: bool | None = None,
         tracing: bool | None = None,
+        profile: ExecutionProfile | None = None,
     ) -> Insert: ...
     def add_to_batch(self, batch: InlineBatch) -> None: ...
     async def execute(self, scylla: Scylla) -> QueryResult: ...
@@ -66,6 +69,7 @@ class Delete:
         timestamp: int | None = None,
         is_idempotent: bool | None = None,
         tracing: bool | None = None,
+        profile: ExecutionProfile | None = None,
     ) -> Delete: ...
     def add_to_batch(self, batch: InlineBatch) -> None: ...
     async def execute(self, scylla: Scylla) -> QueryResult: ...
@@ -87,6 +91,7 @@ class Update:
         timestamp: int | None = None,
         is_idempotent: bool | None = None,
         tracing: bool | None = None,
+        profile: ExecutionProfile | None = None,
     ) -> Update: ...
     def if_exists(self) -> Update: ...
     def if_(self, clause: str, values: list[Any] | None = None) -> Update: ...

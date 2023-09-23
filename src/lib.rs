@@ -1,6 +1,7 @@
 pub mod batches;
 pub mod consistencies;
 pub mod exceptions;
+pub mod execution_profiles;
 pub mod extra_types;
 pub mod inputs;
 pub mod prepared_queries;
@@ -27,6 +28,7 @@ fn _internal(py: Python<'_>, pymod: &PyModule) -> PyResult<()> {
     pymod.add_class::<batches::ScyllaPyBatchType>()?;
     pymod.add_class::<batches::ScyllaPyInlineBatch>()?;
     pymod.add_class::<query_results::ScyllaPyQueryResult>()?;
+    pymod.add_class::<execution_profiles::ScyllaPyExecutionProfile>()?;
     add_submodule(py, pymod, "extra_types", extra_types::module_constructor)?;
     add_submodule(py, pymod, "query_builder", query_builder::add_module)?;
     add_submodule(

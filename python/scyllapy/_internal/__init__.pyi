@@ -15,6 +15,7 @@ class Scylla:
     def __init__(
         self,
         contact_points: list[str],
+        *,
         username: str | None = None,
         password: str | None = None,
         keyspace: str | None = None,
@@ -28,6 +29,7 @@ class Scylla:
         tcp_keepalive_interval: int | None = None,
         tcp_nodelay: bool | None = None,
         disallow_shard_aware_port: bool | None = None,
+        default_execution_profile: ExecutionProfile | None = None,
     ) -> None:
         """
         Configure cluster for later use.
@@ -104,6 +106,15 @@ class Scylla:
     async def get_keyspace(self) -> str | None:
         """Get current keyspace."""
 
+class ExecutionProfile:
+    def __init__(
+        self,
+        *,
+        consistency: Consistency | None = None,
+        serial_consistency: SerialConsistency | None = None,
+        request_timeout: int | None = None,
+    ) -> None: ...
+
 class QueryResult:
     trace_id: str | None
 
@@ -134,6 +145,7 @@ class Query:
     request_timeout: int | None
     is_idempotent: bool | None
     tracing: bool | None
+    profile: ExecutionProfile
 
     def __init__(
         self,
@@ -144,6 +156,7 @@ class Query:
         timestamp: int | None = None,
         is_idempotent: bool | None = None,
         tracing: bool | None = None,
+        profile: ExecutionProfile | None = None,
     ) -> None: ...
     def with_consistency(self, consistency: Consistency | None) -> Query: ...
     def with_serial_consistency(
@@ -154,6 +167,7 @@ class Query:
     def with_timestamp(self, timestamp: int | None) -> Query: ...
     def with_is_idempotent(self, is_idempotent: bool | None) -> Query: ...
     def with_tracing(self, tracing: bool | None) -> Query: ...
+    def with_profile(self, profile: ExecutionProfile | None) -> Query: ...
 
 class BatchType:
     """Possible BatchTypes."""
