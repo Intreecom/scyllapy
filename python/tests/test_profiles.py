@@ -1,7 +1,7 @@
 import pytest
 from tests.utils import random_string
 
-from scyllapy import Consistency, ExecutionProfile, Query, Scylla, SerialConsistency
+from scyllapy import Consistency, ExecutionProfile, Query, Scylla
 from scyllapy.exceptions import ScyllaPyDBError
 
 

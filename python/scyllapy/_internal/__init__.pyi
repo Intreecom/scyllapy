@@ -11,8 +11,8 @@ from typing import (
 
 from scyllapy._internal.load_balancing import LoadBalancingPolicy
 
-T = TypeVar("T")
-T2 = TypeVar("T2")
+_T = TypeVar("_T")
+_T2 = TypeVar("_T2")
 
 class Scylla:
     """
@@ -67,8 +67,8 @@ class Scylla:
         :param keepalive_timeout: sets keepalive timeout.
         :param tcp_keepalive_interval: Sets TCP keepalive interval.
         :param tcp_nodelay: sets TCP nodelay flag.
-        :param disallow_shard_aware_port: If true, prevents the driver from connecting to the shard-aware port,
-            even if the node supports it.
+        :param disallow_shard_aware_port: If true, prevents the driver from connecting
+            to the shard-aware port, even if the node supports it.
         """
     async def startup(self) -> None:
         """Initialize the custer."""
@@ -99,7 +99,8 @@ class Scylla:
 
         :param query: query to use.
         :param params: list of query parameters.
-        :param as_class: DTO class to use for parsing rows (Can be pydantic model or dataclass).
+        :param as_class: DTO class to use for parsing rows
+            (Can be pydantic model or dataclass).
         :param paged: Whether to use paging. Default if false.
         """
     @overload
@@ -146,23 +147,23 @@ class QueryResult:
     @overload
     def all(self, as_class: Literal[None] = None) -> list[dict[str, Any]]: ...
     @overload
-    def all(self, as_class: Callable[..., T] | None = None) -> list[T]: ...
+    def all(self, as_class: Callable[..., _T] | None = None) -> list[_T]: ...
     @overload
     def first(self, as_class: Literal[None] = None) -> dict[str, Any] | None: ...
     @overload
-    def first(self, as_class: Callable[..., T] | None = None) -> T | None: ...
+    def first(self, as_class: Callable[..., _T] | None = None) -> _T | None: ...
     def scalars(self) -> list[Any]: ...
     def scalar(self) -> Any | None: ...
     def __len__(self) -> int: ...
 
-class IterableQueryResult(Generic[T]):
+class IterableQueryResult(Generic[_T]):
     def as_cls(
-        self: IterableQueryResult[T],
-        as_class: Callable[..., T2],
-    ) -> IterableQueryResult[T2]: ...
+        self: IterableQueryResult[_T],
+        as_class: Callable[..., _T2],
+    ) -> IterableQueryResult[_T2]: ...
     def scalars(self) -> IterableQueryResult[Any]: ...
-    def __aiter__(self) -> IterableQueryResult[T]: ...
-    async def __anext__(self) -> T: ...
+    def __aiter__(self) -> IterableQueryResult[_T]: ...
+    async def __anext__(self) -> _T: ...
 
 class Query:
     """
@@ -215,7 +216,7 @@ class Batch:
 
     def __init__(
         self,
-        batch_type: BatchType = BatchType.UNLOGGED,
+        batch_type: BatchType = ...,
         consistency: Consistency | None = None,
         serial_consistency: SerialConsistency | None = None,
         request_timeout: int | None = None,
@@ -228,7 +229,7 @@ class Batch:
 class InlineBatch:
     def __init__(
         self,
-        batch_type: BatchType = BatchType.UNLOGGED,
+        batch_type: BatchType = ...,
         consistency: Consistency | None = None,
         serial_consistency: SerialConsistency | None = None,
         request_timeout: int | None = None,
@@ -245,15 +246,15 @@ class InlineBatch:
 class Consistency:
     """Consistency for query."""
 
-    ANY: "Consistency"
-    ONE: "Consistency"
-    TWO: "Consistency"
-    THREE: "Consistency"
-    QUORUM: "Consistency"
-    ALL: "Consistency"
-    LOCAL_QUORUM: "Consistency"
-    EACH_QUORUM: "Consistency"
-    LOCAL_ONE: "Consistency"
+    ANY: Consistency
+    ONE: Consistency
+    TWO: Consistency
+    THREE: Consistency
+    QUORUM: Consistency
+    ALL: Consistency
+    LOCAL_QUORUM: Consistency
+    EACH_QUORUM: Consistency
+    LOCAL_ONE: Consistency
 
 class SerialConsistency:
     """Serial consistency for query."""

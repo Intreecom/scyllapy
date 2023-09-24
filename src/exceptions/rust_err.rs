@@ -2,7 +2,7 @@ use thiserror::Error;
 
 use super::py_err::{
     ScyllaPyBaseError, ScyllaPyBindingError, ScyllaPyDBError, ScyllaPyMappingError,
-    ScyllaPyQueryBuiderErrror, ScyllaPySessionError,
+    ScyllaPyQueryBuiderError, ScyllaPySessionError,
 };
 
 pub type ScyllaPyResult<T> = Result<T, ScyllaPyError>;
@@ -75,7 +75,7 @@ impl From<ScyllaPyError> for pyo3::PyErr {
             | ScyllaPyError::ValueDowncastError(_, _)
             | ScyllaPyError::NoReturnsError
             | ScyllaPyError::NoColumns => ScyllaPyMappingError::new_err((err_desc,)),
-            ScyllaPyError::QueryBuilderError(_) => ScyllaPyQueryBuiderErrror::new_err((err_desc,)),
+            ScyllaPyError::QueryBuilderError(_) => ScyllaPyQueryBuiderError::new_err((err_desc,)),
         }
     }
 }

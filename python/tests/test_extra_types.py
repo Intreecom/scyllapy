@@ -26,7 +26,7 @@ async def test_int_types(
     table_name = random_string(4)
 
     await scylla.execute(
-        f"CREATE TABLE {table_name} (id {type_name}, PRIMARY KEY (id))"
+        f"CREATE TABLE {table_name} (id {type_name}, PRIMARY KEY (id))",
     )
     insert_query = f"INSERT INTO {table_name}(id) VALUES (?)"
     with pytest.raises(ScyllaPyDBError):
@@ -44,7 +44,7 @@ async def test_int_types(
 async def test_counter(scylla: Scylla) -> None:
     table_name = random_string(4)
     await scylla.execute(
-        f"CREATE TABLE {table_name} (id INT, count COUNTER, PRIMARY KEY (id))"
+        f"CREATE TABLE {table_name} (id INT, count COUNTER, PRIMARY KEY (id))",
     )
 
     query = f"UPDATE {table_name} SET count = count + ? WHERE id = ?"
@@ -66,5 +66,6 @@ async def test_unset(scylla: Scylla) -> None:
     await scylla.execute(f"CREATE TABLE {table_name} (id INT PRIMARY KEY, name TEXT)")
 
     await scylla.execute(
-        f"INSERT INTO {table_name}(id, name) VALUES (?, ?)", [1, extra_types.Unset()]
+        f"INSERT INTO {table_name}(id, name) VALUES (?, ?)",
+        [1, extra_types.Unset()],
     )

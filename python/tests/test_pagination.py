@@ -11,7 +11,7 @@ from scyllapy.query_builder import Select
 async def test_scalars(scylla: Scylla) -> None:
     table_name = random_string(4)
     await scylla.execute(
-        f"CREATE TABLE IF NOT EXISTS {table_name} (id INT PRIMARY KEY)"
+        f"CREATE TABLE IF NOT EXISTS {table_name} (id INT PRIMARY KEY)",
     )
     vals = list(range(10))
     for i in vals:
@@ -25,12 +25,13 @@ async def test_scalars(scylla: Scylla) -> None:
 async def test_dicts(scylla: Scylla) -> None:
     table_name = random_string(4)
     await scylla.execute(
-        f"CREATE TABLE IF NOT EXISTS {table_name} (id INT PRIMARY KEY, val INT)"
+        f"CREATE TABLE IF NOT EXISTS {table_name} (id INT PRIMARY KEY, val INT)",
     )
     vals = list(range(10))
     for i in vals:
         await scylla.execute(
-            f"INSERT INTO {table_name}(id, val) VALUES (?, ?)", [i, -i]
+            f"INSERT INTO {table_name}(id, val) VALUES (?, ?)",
+            [i, -i],
         )
     res = await scylla.execute(f"SELECT id, val FROM {table_name}", paged=True)
     async for row in res:
@@ -47,12 +48,13 @@ async def test_dtos(scylla: Scylla) -> None:
 
     table_name = random_string(4)
     await scylla.execute(
-        f"CREATE TABLE IF NOT EXISTS {table_name} (id INT PRIMARY KEY, val INT)"
+        f"CREATE TABLE IF NOT EXISTS {table_name} (id INT PRIMARY KEY, val INT)",
     )
     vals = list(range(10))
     for i in vals:
         await scylla.execute(
-            f"INSERT INTO {table_name}(id, val) VALUES (?, ?)", [i, -i]
+            f"INSERT INTO {table_name}(id, val) VALUES (?, ?)",
+            [i, -i],
         )
     res = await scylla.execute(f"SELECT id, val FROM {table_name}", paged=True)
     async for row in res.as_cls(TestDTO):
@@ -64,12 +66,13 @@ async def test_dtos(scylla: Scylla) -> None:
 async def test_paged_select_qb(scylla: Scylla) -> None:
     table_name = random_string(4)
     await scylla.execute(
-        f"CREATE TABLE IF NOT EXISTS {table_name} (id INT PRIMARY KEY, val INT)"
+        f"CREATE TABLE IF NOT EXISTS {table_name} (id INT PRIMARY KEY, val INT)",
     )
     vals = list(range(10))
     for i in vals:
         await scylla.execute(
-            f"INSERT INTO {table_name}(id, val) VALUES (?, ?)", [i, -i]
+            f"INSERT INTO {table_name}(id, val) VALUES (?, ?)",
+            [i, -i],
         )
     res = await Select(table_name).execute(scylla, paged=True)
     async for row in res:

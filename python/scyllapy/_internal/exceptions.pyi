@@ -37,7 +37,7 @@ class ScyllaPyMappingError(ScyllaPyBaseError):
     Also it occurs if rows cannot be mapped to python types.
     """
 
-class ScyllaPyQueryBuiderErrror(ScyllaPyBaseError):
+class ScyllaPyQueryBuiderError(ScyllaPyBaseError):
     """
     Error that is thrown if Query cannot be built.
 

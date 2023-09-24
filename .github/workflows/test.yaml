@@ -10,6 +10,7 @@ jobs:
         cmd:
           - black
           - isort
+          - ruff
           - mypy
     runs-on: ubuntu-latest
     steps:
