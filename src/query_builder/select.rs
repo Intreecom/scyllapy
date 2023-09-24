@@ -248,7 +248,7 @@ impl Select {
     ) -> ScyllaPyResult<&'a PyAny> {
         let mut query = Query::new(self.build_query());
         self.request_params_.apply_to_query(&mut query);
-        scylla.native_execute(py, query, self.values_.clone(), paged)
+        scylla.native_execute(py, Some(query), None, self.values_.clone(), paged)
     }
 
     /// Add to batch

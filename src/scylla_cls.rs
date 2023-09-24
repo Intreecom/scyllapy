@@ -13,7 +13,7 @@ use openssl::{
     x509::X509,
 };
 use pyo3::{pyclass, pymethods, PyAny, Python};
-use scylla::{frame::value::ValueList, query::Query};
+use scylla::{frame::value::ValueList, prepared_statement::PreparedStatement, query::Query};
 
 #[pyclass(frozen, weakref)]
 #[derive(Clone)]
@@ -52,7 +52,8 @@ impl Scylla {
     pub fn native_execute<'a>(
         &'a self,
         py: Python<'a>,
-        query: impl Into<Query> + Send + 'static,
+        query: Option<impl Into<Query> + Send + 'static>,
+        prepared: Option<PreparedStatement>,
         values: impl ValueList + Send + 'static,
         paged: bool,
     ) -> ScyllaPyResult<&'a PyAny> {
@@ -64,13 +65,31 @@ impl Scylla {
             ))?;
             // let res = session.query(query, values).await?;
             if paged {
-                Ok(ScyllaPyQueryReturns::IterableQueryResult(
-                    ScyllaPyIterableQueryResult::new(session.query_iter(query, values).await?),
-                ))
+                match (query, prepared) {
+                    (Some(query), None) => Ok(ScyllaPyQueryReturns::IterableQueryResult(
+                        ScyllaPyIterableQueryResult::new(session.query_iter(query, values).await?),
+                    )),
+                    (None, Some(prepared)) => Ok(ScyllaPyQueryReturns::IterableQueryResult(
+                        ScyllaPyIterableQueryResult::new(
+                            session.execute_iter(prepared, values).await?,
+                        ),
+                    )),
+                    _ => Err(ScyllaPyError::SessionError(
+                        "You should pass either query or prepared query.".into(),
+                    )),
+                }
             } else {
-                Ok(ScyllaPyQueryReturns::QueryResult(ScyllaPyQueryResult::new(
-                    session.query(query, values).await?,
-                )))
+                match (query, prepared) {
+                    (Some(query), None) => Ok(ScyllaPyQueryReturns::QueryResult(
+                        ScyllaPyQueryResult::new(session.query(query, values).await?),
+                    )),
+                    (None, Some(prepared)) => Ok(ScyllaPyQueryReturns::QueryResult(
+                        ScyllaPyQueryResult::new(session.execute(&prepared, values).await?),
+                    )),
+                    _ => Err(ScyllaPyError::SessionError(
+                        "You should pass either query or prepared query.".into(),
+                    )),
+                }
             }
         })
         .map_err(Into::into)
@@ -275,36 +294,12 @@ impl Scylla {
         // in query.
         let query_params = parse_python_query_params(params, true)?;
         // We need this clone, to safely share the session between threads.
-        let session_arc = self.scylla_session.clone();
-        scyllapy_future(py, async move {
-            let session_guard = session_arc.read().await;
-            let session = session_guard.as_ref().ok_or(ScyllaPyError::SessionError(
-                "Session is not initialized.".into(),
-            ))?;
-            if paged {
-                let res = match query {
-                    ExecuteInput::Text(text) => session.query_iter(text, query_params).await?,
-                    ExecuteInput::Query(query) => session.query_iter(query, query_params).await?,
-                    ExecuteInput::PreparedQuery(prepared) => {
-                        session.execute_iter(prepared, query_params).await?
-                    }
-                };
-                Ok(ScyllaPyQueryReturns::IterableQueryResult(
-                    ScyllaPyIterableQueryResult::new(res),
-                ))
-            } else {
-                let res = match query {
-                    ExecuteInput::Text(text) => session.query(text, query_params).await?,
-                    ExecuteInput::Query(query) => session.query(query, query_params).await?,
-                    ExecuteInput::PreparedQuery(prepared) => {
-                        session.execute(&prepared.into(), query_params).await?
-                    }
-                };
-                Ok(ScyllaPyQueryReturns::QueryResult(ScyllaPyQueryResult::new(
-                    res,
-                )))
-            }
-        })
+        let (query, prepared) = match query {
+            ExecuteInput::Text(txt) => (Some(Query::new(txt)), None),
+            ExecuteInput::Query(query) => (Some(Query::from(query)), None),
+            ExecuteInput::PreparedQuery(prep) => (None, Some(PreparedStatement::from(prep))),
+        };
+        self.native_execute(py, query, prepared, query_params, paged)
     }
 
     /// Execute a batch statement.
