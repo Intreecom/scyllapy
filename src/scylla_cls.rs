@@ -5,7 +5,7 @@ use crate::{
     execution_profiles::ScyllaPyExecutionProfile,
     inputs::{BatchInput, ExecuteInput, PrepareInput},
     prepared_queries::ScyllaPyPreparedQuery,
-    query_results::ScyllaPyQueryResult,
+    query_results::{ScyllaPyIterableQueryResult, ScyllaPyQueryResult, ScyllaPyQueryReturns},
     utils::{parse_python_query_params, scyllapy_future},
 };
 use openssl::{
@@ -54,6 +54,7 @@ impl Scylla {
         py: Python<'a>,
         query: impl Into<Query> + Send + 'static,
         values: impl ValueList + Send + 'static,
+        paged: bool,
     ) -> ScyllaPyResult<&'a PyAny> {
         let session_arc = self.scylla_session.clone();
         scyllapy_future(py, async move {
@@ -61,8 +62,16 @@ impl Scylla {
             let session = session_guard.as_ref().ok_or(ScyllaPyError::SessionError(
                 "Session is not initialized.".into(),
             ))?;
-            let res = session.query(query, values).await?;
-            Ok(ScyllaPyQueryResult::new(res))
+            // let res = session.query(query, values).await?;
+            if paged {
+                Ok(ScyllaPyQueryReturns::IterableQueryResult(
+                    ScyllaPyIterableQueryResult::new(session.query_iter(query, values).await?),
+                ))
+            } else {
+                Ok(ScyllaPyQueryReturns::QueryResult(ScyllaPyQueryResult::new(
+                    session.query(query, values).await?,
+                )))
+            }
         })
         .map_err(Into::into)
     }
@@ -254,12 +263,13 @@ impl Scylla {
     /// # Errors
     ///
     /// Can result in an error in any case, when something goes wrong.
-    #[pyo3(signature = (query, params = None))]
+    #[pyo3(signature = (query, params = None, *, paged = false))]
     pub fn execute<'a>(
         &'a self,
         py: Python<'a>,
         query: ExecuteInput,
         params: Option<&'a PyAny>,
+        paged: bool,
     ) -> ScyllaPyResult<&'a PyAny> {
         // We need to prepare parameter we're going to use
         // in query.
@@ -271,14 +281,29 @@ impl Scylla {
             let session = session_guard.as_ref().ok_or(ScyllaPyError::SessionError(
                 "Session is not initialized.".into(),
             ))?;
-            let res = match query {
-                ExecuteInput::Text(text) => session.query(text, query_params).await?,
-                ExecuteInput::Query(query) => session.query(query, query_params).await?,
-                ExecuteInput::PreparedQuery(prepared) => {
-                    session.execute(&prepared.into(), query_params).await?
-                }
-            };
-            Ok(ScyllaPyQueryResult::new(res))
+            if paged {
+                let res = match query {
+                    ExecuteInput::Text(text) => session.query_iter(text, query_params).await?,
+                    ExecuteInput::Query(query) => session.query_iter(query, query_params).await?,
+                    ExecuteInput::PreparedQuery(prepared) => {
+                        session.execute_iter(prepared, query_params).await?
+                    }
+                };
+                Ok(ScyllaPyQueryReturns::IterableQueryResult(
+                    ScyllaPyIterableQueryResult::new(res),
+                ))
+            } else {
+                let res = match query {
+                    ExecuteInput::Text(text) => session.query(text, query_params).await?,
+                    ExecuteInput::Query(query) => session.query(query, query_params).await?,
+                    ExecuteInput::PreparedQuery(prepared) => {
+                        session.execute(&prepared.into(), query_params).await?
+                    }
+                };
+                Ok(ScyllaPyQueryReturns::QueryResult(ScyllaPyQueryResult::new(
+                    res,
+                )))
+            }
         })
     }
 
