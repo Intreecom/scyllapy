@@ -1,5 +1,7 @@
 from typing import Any, Callable, Iterable, Literal, Optional, TypeVar, overload
 
+from scyllapy._internal.load_balancing import LoadBalancingPolicy
+
 T = TypeVar("T")
 
 class Scylla:
@@ -113,6 +115,7 @@ class ExecutionProfile:
         consistency: Consistency | None = None,
         serial_consistency: SerialConsistency | None = None,
         request_timeout: int | None = None,
+        load_balancing_policy: LoadBalancingPolicy | None = None,
     ) -> None: ...
 
 class QueryResult:
