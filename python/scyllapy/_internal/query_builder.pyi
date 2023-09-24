@@ -1,9 +1,10 @@
-from typing import Any
+from typing import Any, Literal, overload
 
 from scyllapy._internal import (
     Consistency,
     ExecutionProfile,
     InlineBatch,
+    IterableQueryResult,
     QueryResult,
     Scylla,
     SerialConsistency,
@@ -31,7 +32,16 @@ class Select:
         profile: ExecutionProfile | None = None,
     ) -> Select: ...
     def add_to_batch(self, batch: InlineBatch) -> None: ...
-    async def execute(self, scylla: Scylla) -> QueryResult: ...
+    @overload
+    async def execute(  # type: ignore
+        self, scylla: Scylla, *, paged: Literal[False] = False
+    ) -> QueryResult: ...
+    @overload
+    async def execute(
+        self, scylla: Scylla, *, paged: Literal[True] = True
+    ) -> IterableQueryResult[dict[str, Any]]: ...
+    @overload
+    async def execute(self, scylla: Scylla, *, paged: bool = False) -> Any: ...
 
 class Insert:
     def __init__(self, table: str) -> None: ...

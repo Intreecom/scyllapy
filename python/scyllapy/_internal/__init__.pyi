@@ -1,8 +1,18 @@
-from typing import Any, Callable, Iterable, Literal, Optional, TypeVar, overload
+from typing import (
+    Any,
+    Callable,
+    Generic,
+    Iterable,
+    Literal,
+    Optional,
+    TypeVar,
+    overload,
+)
 
 from scyllapy._internal.load_balancing import LoadBalancingPolicy
 
 T = TypeVar("T")
+T2 = TypeVar("T2")
 
 class Scylla:
     """
@@ -65,10 +75,13 @@ class Scylla:
     async def shutdown(self) -> None:
         """Shutdown the cluster."""
     async def prepare(self, query: str | Query) -> PreparedQuery: ...
-    async def execute(
+    @overload
+    async def execute(  # type: ignore
         self,
         query: str | Query | PreparedQuery,
-        params: Optional[Iterable[Any] | dict[str, Any]] = None,
+        params: Iterable[Any] | dict[str, Any] | None = None,
+        *,
+        paged: Literal[False] = False,
     ) -> QueryResult:
         """
         Execute a query.
@@ -87,7 +100,16 @@ class Scylla:
         :param query: query to use.
         :param params: list of query parameters.
         :param as_class: DTO class to use for parsing rows (Can be pydantic model or dataclass).
+        :param paged: Whether to use paging. Default if false.
         """
+    @overload
+    async def execute(
+        self,
+        query: str | Query | PreparedQuery,
+        params: Iterable[Any] | dict[str, Any] | None = None,
+        *,
+        paged: Literal[True] = ...,
+    ) -> IterableQueryResult[dict[str, Any]]: ...
     async def batch(
         self,
         batch: Batch | InlineBatch,
@@ -132,6 +154,15 @@ class QueryResult:
     def scalars(self) -> list[Any]: ...
     def scalar(self) -> Any | None: ...
     def __len__(self) -> int: ...
+
+class IterableQueryResult(Generic[T]):
+    def as_cls(
+        self: IterableQueryResult[T],
+        as_class: Callable[..., T2],
+    ) -> IterableQueryResult[T2]: ...
+    def scalars(self) -> IterableQueryResult[Any]: ...
+    def __aiter__(self) -> IterableQueryResult[T]: ...
+    async def __anext__(self) -> T: ...
 
 class Query:
     """
