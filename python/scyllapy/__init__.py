@@ -28,5 +28,4 @@ __all__ = [
     "extra_types",
     "InlineBatch",
     "ExecutionProfile",
-    "query_builder",
 ]

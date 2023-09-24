@@ -56,7 +56,7 @@ impl ScyllaPyUnset {
 ///
 /// May return error if module cannot be created,
 /// or any of classes cannot be added.
-pub fn module_constructor(_py: Python<'_>, module: &PyModule) -> PyResult<()> {
+pub fn setup_module(_py: Python<'_>, module: &PyModule) -> PyResult<()> {
     module.add_class::<SmallInt>()?;
     module.add_class::<TinyInt>()?;
     module.add_class::<BigInt>()?;

@@ -7,11 +7,11 @@ from ._internal.exceptions import (
     ScyllaPySessionError,
 )
 
-__all__ = [
+__all__ = (
     "ScyllaPyBaseError",
     "ScyllaPyDBError",
     "ScyllaPySessionError",
     "ScyllaPyMappingError",
     "ScyllaPyQueryBuiderErrror",
     "ScyllaPyBindingError",
-]
+)
