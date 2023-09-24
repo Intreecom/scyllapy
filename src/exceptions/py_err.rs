@@ -11,7 +11,7 @@ create_exception!(scyllapy.exceptions, ScyllaPySessionError, ScyllaPyDBError);
 create_exception!(scyllapy.exceptions, ScyllaPyMappingError, ScyllaPyBaseError);
 create_exception!(
     scyllapy.exceptions,
-    ScyllaPyQueryBuiderErrror,
+    ScyllaPyQueryBuiderError,
     ScyllaPyBaseError
 );
 
@@ -40,7 +40,7 @@ pub fn setup_module(py: Python<'_>, module: &PyModule) -> PyResult<()> {
     )?;
     module.add(
         "ScyllaPyQueryBuiderErrror",
-        py.get_type::<ScyllaPyQueryBuiderErrror>(),
+        py.get_type::<ScyllaPyQueryBuiderError>(),
     )?;
     Ok(())
 }

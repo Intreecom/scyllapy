@@ -34,11 +34,17 @@ class Select:
     def add_to_batch(self, batch: InlineBatch) -> None: ...
     @overload
     async def execute(  # type: ignore
-        self, scylla: Scylla, *, paged: Literal[False] = False
+        self,
+        scylla: Scylla,
+        *,
+        paged: Literal[False] = False,
     ) -> QueryResult: ...
     @overload
     async def execute(
-        self, scylla: Scylla, *, paged: Literal[True] = True
+        self,
+        scylla: Scylla,
+        *,
+        paged: Literal[True] = True,
     ) -> IterableQueryResult[dict[str, Any]]: ...
     @overload
     async def execute(self, scylla: Scylla, *, paged: bool = False) -> Any: ...

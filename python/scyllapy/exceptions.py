@@ -3,7 +3,7 @@ from ._internal.exceptions import (
     ScyllaPyBindingError,
     ScyllaPyDBError,
     ScyllaPyMappingError,
-    ScyllaPyQueryBuiderErrror,
+    ScyllaPyQueryBuiderError,
     ScyllaPySessionError,
 )
 
@@ -12,6 +12,6 @@ __all__ = (
     "ScyllaPyDBError",
     "ScyllaPySessionError",
     "ScyllaPyMappingError",
-    "ScyllaPyQueryBuiderErrror",
+    "ScyllaPyQueryBuiderError",
     "ScyllaPyBindingError",
 )

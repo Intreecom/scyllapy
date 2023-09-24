@@ -27,6 +27,14 @@ repos:
         always_run: true
         pass_filenames: false
         args: ["python"]
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.0.291
+    hooks:
+      - id: ruff
+        name: ruff
+        pass_filenames: false
+        always_run: true
+        args: ["python", "--fix"]
   - repo: local
     hooks:
       - id: fmt

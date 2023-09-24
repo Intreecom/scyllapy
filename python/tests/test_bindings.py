@@ -39,7 +39,7 @@ async def test_bindings(
 ) -> None:
     table_name = random_string(4)
     await scylla.execute(
-        f"CREATE TABLE {table_name} (id {type_name}, PRIMARY KEY (id))"
+        f"CREATE TABLE {table_name} (id {type_name}, PRIMARY KEY (id))",
     )
     insert_query = f"INSERT INTO {table_name}(id) VALUES (?)"
     await scylla.execute(insert_query, [test_val])
@@ -71,7 +71,7 @@ async def test_collections(
 ) -> None:
     table_name = random_string(4)
     await scylla.execute(
-        f"CREATE TABLE {table_name} (id INT, coll {type_name}, PRIMARY KEY (id))"
+        f"CREATE TABLE {table_name} (id INT, coll {type_name}, PRIMARY KEY (id))",
     )
     insert_query = f"INSERT INTO {table_name}(id, coll) VALUES (?, ?)"
 
@@ -87,7 +87,7 @@ async def test_collections(
 async def test_named_parameters(scylla: Scylla) -> None:
     table_name = random_string(4)
     await scylla.execute(
-        f"CREATE TABLE {table_name} (id INT, name TEXT, age INT, PRIMARY KEY (id))"
+        f"CREATE TABLE {table_name} (id INT, name TEXT, age INT, PRIMARY KEY (id))",
     )
     to_insert = {
         "id": random.randint(0, 100),
@@ -110,7 +110,7 @@ async def test_timestamps(scylla: Scylla) -> None:
     # We do replace this, because scylla ony has millisecond percision.
     now = now.replace(microsecond=now.microsecond - (now.microsecond % 1000))
     await scylla.execute(
-        f"CREATE TABLE {table_name} (id INT, time TIMESTAMP, PRIMARY KEY (id))"
+        f"CREATE TABLE {table_name} (id INT, time TIMESTAMP, PRIMARY KEY (id))",
     )
     insert_query = f"INSERT INTO {table_name}(id, time) VALUES (?, ?)"
 
