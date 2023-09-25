@@ -31,23 +31,29 @@ class LoadBalancingPolicy:
     Can be applied to profiles.
     """
 
-    def __init__(
-        self,
+    @classmethod
+    async def build(
+        cls,
         *,
         token_aware: bool | None = None,
         prefer_rack: str | None = None,
         prefer_datacenter: str | None = None,
         permit_dc_failover: bool | None = None,
         shuffling_replicas: bool | None = None,
-        latency_awareness: LatencyAwareness | None = None,
-    ) -> None: ...
+    ) -> LoadBalancingPolicy: ...
     """
     Construct load balancing policy.
+
+    It requires to be async, becausse it needs to start a background task.
 
     :param token_aware: Whether to use token aware routing.
     :param prefer_rack: Name of the rack to prefer.
     :param prefer_datacenter: Name of the datacenter to prefer.
     :param permit_dc_failover: Whether to allow datacenter failover.
     :param shuffling_replicas: Whether to shuffle replicas.
-    :param latency_awareness: Latency awareness policy.
     """
+
+    async def with_latency_awareness(
+        self,
+        latency_awareness: LatencyAwareness,
+    ) -> None: ...

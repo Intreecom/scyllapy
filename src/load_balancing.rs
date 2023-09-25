@@ -1,8 +1,14 @@
 use std::sync::Arc;
 
-use pyo3::{pyclass, pymethods, types::PyModule, PyResult, Python};
+use pyo3::{
+    pyclass, pymethods,
+    types::{PyModule, PyType},
+    PyAny, PyResult, Python,
+};
 use scylla::load_balancing::{DefaultPolicy, LatencyAwarenessBuilder, LoadBalancingPolicy};
 use std::time::Duration;
+
+use crate::{exceptions::rust_err::ScyllaPyResult, utils::scyllapy_future};
 
 #[pyclass(name = "LoadBalancingPolicy")]
 #[derive(Clone, Debug)]
@@ -12,7 +18,7 @@ pub struct ScyllaPyLoadBalancingPolicy {
 
 #[pymethods]
 impl ScyllaPyLoadBalancingPolicy {
-    #[new]
+    #[classmethod]
     #[pyo3(signature = (
         *,
         token_aware = None,
@@ -23,36 +29,39 @@ impl ScyllaPyLoadBalancingPolicy {
         latency_awareness = None,
     )
     )]
-    fn new(
+    fn build(
+        cls: &PyType,
         token_aware: Option<bool>,
         prefer_rack: Option<String>,
         prefer_datacenter: Option<String>,
         permit_dc_failover: Option<bool>,
         shuffling_replicas: Option<bool>,
         latency_awareness: Option<ScyllaPyLatencyAwareness>,
-    ) -> Self {
-        let mut policy_builer = DefaultPolicy::builder();
-        if let Some(permit) = permit_dc_failover {
-            policy_builer = policy_builer.permit_dc_failover(permit);
-        }
-        if let Some(token) = token_aware {
-            policy_builer = policy_builer.token_aware(token);
-        }
-        if let Some(rack) = prefer_rack {
-            policy_builer = policy_builer.prefer_rack(rack);
-        }
-        if let Some(dc) = prefer_datacenter {
-            policy_builer = policy_builer.prefer_datacenter(dc);
-        }
-        if let Some(shufle) = shuffling_replicas {
-            policy_builer = policy_builer.enable_shuffling_replicas(shufle);
-        }
-        if let Some(latency_awareness) = latency_awareness {
-            policy_builer = policy_builer.latency_awareness(latency_awareness.into());
-        }
-        Self {
-            inner: policy_builer.build(),
-        }
+    ) -> ScyllaPyResult<&PyAny> {
+        scyllapy_future(cls.py(), async move {
+            let mut policy_builer = DefaultPolicy::builder();
+            if let Some(permit) = permit_dc_failover {
+                policy_builer = policy_builer.permit_dc_failover(permit);
+            }
+            if let Some(token) = token_aware {
+                policy_builer = policy_builer.token_aware(token);
+            }
+            if let Some(rack) = prefer_rack {
+                policy_builer = policy_builer.prefer_rack(rack);
+            }
+            if let Some(dc) = prefer_datacenter {
+                policy_builer = policy_builer.prefer_datacenter(dc);
+            }
+            if let Some(shufle) = shuffling_replicas {
+                policy_builer = policy_builer.enable_shuffling_replicas(shufle);
+            }
+            if let Some(latency_awareness) = latency_awareness {
+                policy_builer = policy_builer.latency_awareness(latency_awareness.into());
+            }
+            Ok(Self {
+                inner: policy_builer.build(),
+            })
+        })
     }
 }
 

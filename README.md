@@ -215,19 +215,36 @@ profile can be used while creating a cluster or when defining queries.
 
 ```python
 from scyllapy import Consistency, ExecutionProfile, Query, Scylla, SerialConsistency
+from scyllapy.load_balancing import LoadBalancingPolicy, LatencyAwareness
 
 default_profile = ExecutionProfile(
     consistency=Consistency.LOCAL_QUORUM,
     serial_consistency=SerialConsistency.LOCAL_SERIAL,
     request_timeout=2,
 )
-query_profile = ExecutionProfile(
-    consistency=Consistency.ALL,
-    serial_consistency=SerialConsistency.SERIAL,
-)
-
 
 async def main():
+    query_profile = ExecutionProfile(
+        consistency=Consistency.ALL,
+        serial_consistency=SerialConsistency.SERIAL,
+        # Load balancing cannot be constructed without running event loop.
+        # If you won't do it inside async funcion, it will result in error.
+        load_balancing_policy=await LoadBalancingPolicy.build(
+            token_aware=True,
+            prefer_rack="rack1",
+            prefer_datacenter="dc1",
+            permit_dc_failover=True,
+            shuffling_replicas=True,
+            latency_awareness=LatencyAwareness(
+                minimum_measurements=10,
+                retry_period=1000,
+                exclusion_threshold=1.4,
+                update_rate=1000,
+                scale=2,
+            ),
+        ),
+    )
+
     scylla = Scylla(
         ["192.168.32.4"],
         default_execution_profile=default_profile,
