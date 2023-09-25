@@ -39,7 +39,7 @@ pub fn setup_module(py: Python<'_>, module: &PyModule) -> PyResult<()> {
         py.get_type::<ScyllaPyMappingError>(),
     )?;
     module.add(
-        "ScyllaPyQueryBuiderErrror",
+        "ScyllaPyQueryBuiderError",
         py.get_type::<ScyllaPyQueryBuiderError>(),
     )?;
     Ok(())
