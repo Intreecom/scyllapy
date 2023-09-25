@@ -239,10 +239,16 @@ impl Select {
     /// # Errors
     ///
     /// Proxies errors from `native_execute`.
-    pub fn execute<'a>(&'a self, py: Python<'a>, scylla: &'a Scylla) -> ScyllaPyResult<&'a PyAny> {
+    #[pyo3(signature = (scylla, *, paged = false))]
+    pub fn execute<'a>(
+        &'a self,
+        py: Python<'a>,
+        scylla: &'a Scylla,
+        paged: bool,
+    ) -> ScyllaPyResult<&'a PyAny> {
         let mut query = Query::new(self.build_query());
         self.request_params_.apply_to_query(&mut query);
-        scylla.native_execute(py, query, self.values_.clone())
+        scylla.native_execute(py, Some(query), None, self.values_.clone(), paged)
     }
 
     /// Add to batch

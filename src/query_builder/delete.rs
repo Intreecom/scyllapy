@@ -201,7 +201,7 @@ impl Delete {
         } else {
             self.values_.clone()
         };
-        scylla.native_execute(py, query, values)
+        scylla.native_execute(py, Some(query), None, values, false)
     }
 
     /// Add to batch

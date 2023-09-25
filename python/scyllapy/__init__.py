@@ -4,6 +4,7 @@ from ._internal import (
     Batch,
     BatchType,
     Consistency,
+    ExecutionProfile,
     InlineBatch,
     PreparedQuery,
     Query,
@@ -26,5 +27,5 @@ __all__ = [
     "QueryResult",
     "extra_types",
     "InlineBatch",
-    "query_builder",
+    "ExecutionProfile",
 ]

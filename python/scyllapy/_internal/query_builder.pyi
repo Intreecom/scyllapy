@@ -1,8 +1,10 @@
-from typing import Any
+from typing import Any, Literal, overload
 
 from scyllapy._internal import (
     Consistency,
+    ExecutionProfile,
     InlineBatch,
+    IterableQueryResult,
     QueryResult,
     Scylla,
     SerialConsistency,
@@ -27,9 +29,25 @@ class Select:
         timestamp: int | None = None,
         is_idempotent: bool | None = None,
         tracing: bool | None = None,
+        profile: ExecutionProfile | None = None,
     ) -> Select: ...
     def add_to_batch(self, batch: InlineBatch) -> None: ...
-    async def execute(self, scylla: Scylla) -> QueryResult: ...
+    @overload
+    async def execute(  # type: ignore
+        self,
+        scylla: Scylla,
+        *,
+        paged: Literal[False] = False,
+    ) -> QueryResult: ...
+    @overload
+    async def execute(
+        self,
+        scylla: Scylla,
+        *,
+        paged: Literal[True] = True,
+    ) -> IterableQueryResult[dict[str, Any]]: ...
+    @overload
+    async def execute(self, scylla: Scylla, *, paged: bool = False) -> Any: ...
 
 class Insert:
     def __init__(self, table: str) -> None: ...
@@ -46,6 +64,7 @@ class Insert:
         timestamp: int | None = None,
         is_idempotent: bool | None = None,
         tracing: bool | None = None,
+        profile: ExecutionProfile | None = None,
     ) -> Insert: ...
     def add_to_batch(self, batch: InlineBatch) -> None: ...
     async def execute(self, scylla: Scylla) -> QueryResult: ...
@@ -66,6 +85,7 @@ class Delete:
         timestamp: int | None = None,
         is_idempotent: bool | None = None,
         tracing: bool | None = None,
+        profile: ExecutionProfile | None = None,
     ) -> Delete: ...
     def add_to_batch(self, batch: InlineBatch) -> None: ...
     async def execute(self, scylla: Scylla) -> QueryResult: ...
@@ -87,6 +107,7 @@ class Update:
         timestamp: int | None = None,
         is_idempotent: bool | None = None,
         tracing: bool | None = None,
+        profile: ExecutionProfile | None = None,
     ) -> Update: ...
     def if_exists(self) -> Update: ...
     def if_(self, clause: str, values: list[Any] | None = None) -> Update: ...

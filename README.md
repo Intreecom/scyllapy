@@ -160,6 +160,104 @@ async def run_batch(scylla: Scylla, num_queries: int) -> None:
     await scylla.batch(batch, [{"id": 1}])  # Will rase an error!
 ```
 
+## Pagination
+
+Sometimes you want to query lots of data. For such cases it's better not to
+fetch all results at once, but fetch them using pagination. It reduces load
+not only on your application, but also on a cluster.
+
+To execute query with pagination, simply add `paged=True` in execute method.
+After doing so, `execute` method will return `IterableQueryResult`, instead of `QueryResult`.
+Instances of `IterableQueryResult` can be iterated with `async for` statements.
+You, as a client, won't see any information about pages, it's all handeled internally within a driver.
+
+Please note, that paginated queries are slower to fetch all rows, but much more memory efficent for large datasets.
+
+```python
+    result = await scylla.execute("SELECT * FROM table", paged=True)
+    async for row in result:
+        print(row)
+
+```
+
+Of course, you can change how results returned to you, by either using `scalars` or
+`as_cls`. For example:
+
+```python
+async def func(scylla: Scylla) -> None:
+    rows = await scylla.execute("SELECT id FROM table", paged=True)
+    # Will print ids of each returned row.
+    async for test_id in rows.scalars():
+        print(test_id)
+
+```
+
+```python
+from dataclasses import dataclass
+
+@dataclass
+class MyDTO:
+    id: int
+    val: int
+
+async def func(scylla: Scylla) -> None:
+    rows = await scylla.execute("SELECT * FROM table", paged=True)
+    # Will print ids of each returned row.
+    async for my_dto in rows.as_cls(MyDTO):
+        print(my_dto.id, my_dto.val)
+
+```
+
+## Execution profiles
+
+You can define profiles using `ExecutionProfile` class. After that the
+profile can be used while creating a cluster or when defining queries.
+
+```python
+from scyllapy import Consistency, ExecutionProfile, Query, Scylla, SerialConsistency
+from scyllapy.load_balancing import LoadBalancingPolicy, LatencyAwareness
+
+default_profile = ExecutionProfile(
+    consistency=Consistency.LOCAL_QUORUM,
+    serial_consistency=SerialConsistency.LOCAL_SERIAL,
+    request_timeout=2,
+)
+
+async def main():
+    query_profile = ExecutionProfile(
+        consistency=Consistency.ALL,
+        serial_consistency=SerialConsistency.SERIAL,
+        # Load balancing cannot be constructed without running event loop.
+        # If you won't do it inside async funcion, it will result in error.
+        load_balancing_policy=await LoadBalancingPolicy.build(
+            token_aware=True,
+            prefer_rack="rack1",
+            prefer_datacenter="dc1",
+            permit_dc_failover=True,
+            shuffling_replicas=True,
+            latency_awareness=LatencyAwareness(
+                minimum_measurements=10,
+                retry_period=1000,
+                exclusion_threshold=1.4,
+                update_rate=1000,
+                scale=2,
+            ),
+        ),
+    )
+
+    scylla = Scylla(
+        ["192.168.32.4"],
+        default_execution_profile=default_profile,
+    )
+    await scylla.startup()
+    await scylla.execute(
+        Query(
+            "SELECT * FROM system_schema.keyspaces;",
+            profile=query_profile,
+        )
+    )
+```
+
 ### Results
 
 Every query returns a class that represents returned rows. It allows you to not fetch
@@ -291,4 +389,17 @@ async def execute_batch(scylla: Scylla) -> None:
         Insert("users").set("id", i).set("name", "test").add_to_batch(batch)
     await scylla.batch(batch)
 
+```
+
+## Paging
+
+Queries that were built with QueryBuilder also support paged returns.
+But it supported only for select, because update, delete and insert should
+not return anything and it makes no sense implementing it.
+To make built `Select` query return paginated iterator, add paged parameter in execute method.
+
+```python
+    rows = await Select("test").execute(scylla, paged=True)
+    async for row in rows:
+        print(row['id'])
 ```

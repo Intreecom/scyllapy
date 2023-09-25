@@ -1,6 +1,18 @@
-from typing import Any, Callable, Iterable, Literal, Optional, TypeVar, overload
+from typing import (
+    Any,
+    Callable,
+    Generic,
+    Iterable,
+    Literal,
+    Optional,
+    TypeVar,
+    overload,
+)
 
-T = TypeVar("T")
+from scyllapy._internal.load_balancing import LoadBalancingPolicy
+
+_T = TypeVar("_T")
+_T2 = TypeVar("_T2")
 
 class Scylla:
     """
@@ -15,6 +27,7 @@ class Scylla:
     def __init__(
         self,
         contact_points: list[str],
+        *,
         username: str | None = None,
         password: str | None = None,
         keyspace: str | None = None,
@@ -28,6 +41,7 @@ class Scylla:
         tcp_keepalive_interval: int | None = None,
         tcp_nodelay: bool | None = None,
         disallow_shard_aware_port: bool | None = None,
+        default_execution_profile: ExecutionProfile | None = None,
     ) -> None:
         """
         Configure cluster for later use.
@@ -53,18 +67,21 @@ class Scylla:
         :param keepalive_timeout: sets keepalive timeout.
         :param tcp_keepalive_interval: Sets TCP keepalive interval.
         :param tcp_nodelay: sets TCP nodelay flag.
-        :param disallow_shard_aware_port: If true, prevents the driver from connecting to the shard-aware port,
-            even if the node supports it.
+        :param disallow_shard_aware_port: If true, prevents the driver from connecting
+            to the shard-aware port, even if the node supports it.
         """
     async def startup(self) -> None:
         """Initialize the custer."""
     async def shutdown(self) -> None:
         """Shutdown the cluster."""
     async def prepare(self, query: str | Query) -> PreparedQuery: ...
-    async def execute(
+    @overload
+    async def execute(  # type: ignore
         self,
         query: str | Query | PreparedQuery,
-        params: Optional[Iterable[Any] | dict[str, Any]] = None,
+        params: Iterable[Any] | dict[str, Any] | None = None,
+        *,
+        paged: Literal[False] = False,
     ) -> QueryResult:
         """
         Execute a query.
@@ -82,8 +99,18 @@ class Scylla:
 
         :param query: query to use.
         :param params: list of query parameters.
-        :param as_class: DTO class to use for parsing rows (Can be pydantic model or dataclass).
+        :param as_class: DTO class to use for parsing rows
+            (Can be pydantic model or dataclass).
+        :param paged: Whether to use paging. Default if false.
         """
+    @overload
+    async def execute(
+        self,
+        query: str | Query | PreparedQuery,
+        params: Iterable[Any] | dict[str, Any] | None = None,
+        *,
+        paged: Literal[True] = ...,
+    ) -> IterableQueryResult[dict[str, Any]]: ...
     async def batch(
         self,
         batch: Batch | InlineBatch,
@@ -104,20 +131,39 @@ class Scylla:
     async def get_keyspace(self) -> str | None:
         """Get current keyspace."""
 
+class ExecutionProfile:
+    def __init__(
+        self,
+        *,
+        consistency: Consistency | None = None,
+        serial_consistency: SerialConsistency | None = None,
+        request_timeout: int | None = None,
+        load_balancing_policy: LoadBalancingPolicy | None = None,
+    ) -> None: ...
+
 class QueryResult:
     trace_id: str | None
 
     @overload
     def all(self, as_class: Literal[None] = None) -> list[dict[str, Any]]: ...
     @overload
-    def all(self, as_class: Callable[..., T] | None = None) -> list[T]: ...
+    def all(self, as_class: Callable[..., _T] | None = None) -> list[_T]: ...
     @overload
     def first(self, as_class: Literal[None] = None) -> dict[str, Any] | None: ...
     @overload
-    def first(self, as_class: Callable[..., T] | None = None) -> T | None: ...
+    def first(self, as_class: Callable[..., _T] | None = None) -> _T | None: ...
     def scalars(self) -> list[Any]: ...
     def scalar(self) -> Any | None: ...
     def __len__(self) -> int: ...
+
+class IterableQueryResult(Generic[_T]):
+    def as_cls(
+        self: IterableQueryResult[_T],
+        as_class: Callable[..., _T2],
+    ) -> IterableQueryResult[_T2]: ...
+    def scalars(self) -> IterableQueryResult[Any]: ...
+    def __aiter__(self) -> IterableQueryResult[_T]: ...
+    async def __anext__(self) -> _T: ...
 
 class Query:
     """
@@ -134,6 +180,7 @@ class Query:
     request_timeout: int | None
     is_idempotent: bool | None
     tracing: bool | None
+    profile: ExecutionProfile
 
     def __init__(
         self,
@@ -144,6 +191,7 @@ class Query:
         timestamp: int | None = None,
         is_idempotent: bool | None = None,
         tracing: bool | None = None,
+        profile: ExecutionProfile | None = None,
     ) -> None: ...
     def with_consistency(self, consistency: Consistency | None) -> Query: ...
     def with_serial_consistency(
@@ -154,6 +202,7 @@ class Query:
     def with_timestamp(self, timestamp: int | None) -> Query: ...
     def with_is_idempotent(self, is_idempotent: bool | None) -> Query: ...
     def with_tracing(self, tracing: bool | None) -> Query: ...
+    def with_profile(self, profile: ExecutionProfile | None) -> Query: ...
 
 class BatchType:
     """Possible BatchTypes."""
@@ -167,7 +216,7 @@ class Batch:
 
     def __init__(
         self,
-        batch_type: BatchType = BatchType.UNLOGGED,
+        batch_type: BatchType = ...,
         consistency: Consistency | None = None,
         serial_consistency: SerialConsistency | None = None,
         request_timeout: int | None = None,
@@ -180,7 +229,7 @@ class Batch:
 class InlineBatch:
     def __init__(
         self,
-        batch_type: BatchType = BatchType.UNLOGGED,
+        batch_type: BatchType = ...,
         consistency: Consistency | None = None,
         serial_consistency: SerialConsistency | None = None,
         request_timeout: int | None = None,
@@ -197,15 +246,15 @@ class InlineBatch:
 class Consistency:
     """Consistency for query."""
 
-    ANY: "Consistency"
-    ONE: "Consistency"
-    TWO: "Consistency"
-    THREE: "Consistency"
-    QUORUM: "Consistency"
-    ALL: "Consistency"
-    LOCAL_QUORUM: "Consistency"
-    EACH_QUORUM: "Consistency"
-    LOCAL_ONE: "Consistency"
+    ANY: Consistency
+    ONE: Consistency
+    TWO: Consistency
+    THREE: Consistency
+    QUORUM: Consistency
+    ALL: Consistency
+    LOCAL_QUORUM: Consistency
+    EACH_QUORUM: Consistency
+    LOCAL_ONE: Consistency
 
 class SerialConsistency:
     """Serial consistency for query."""

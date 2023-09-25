@@ -1,5 +1,5 @@
 use pyo3::pyclass;
-use scylla::frame::types::{Consistency, SerialConsistency};
+use scylla::statement::{Consistency, SerialConsistency};
 
 /// Consistency levels for queries.
 ///

@@ -1,11 +1,19 @@
 use pyo3::{create_exception, types::PyModule, PyResult, Python};
 
-create_exception!("scyllapy", ScyllaPyBaseError, pyo3::exceptions::PyException);
-create_exception!("scyllapy", ScyllaPyBindingError, ScyllaPyBaseError);
-create_exception!("scyllapy", ScyllaPyDBError, ScyllaPyBaseError);
-create_exception!("scyllapy", ScyllaPySessionError, ScyllaPyDBError);
-create_exception!("scyllapy", ScyllaPyMappingError, ScyllaPyBaseError);
-create_exception!("scyllapy", ScyllaPyQueryBuiderErrror, ScyllaPyBaseError);
+create_exception!(
+    scyllapy.exceptions,
+    ScyllaPyBaseError,
+    pyo3::exceptions::PyException
+);
+create_exception!(scyllapy.exceptions, ScyllaPyBindingError, ScyllaPyBaseError);
+create_exception!(scyllapy.exceptions, ScyllaPyDBError, ScyllaPyBaseError);
+create_exception!(scyllapy.exceptions, ScyllaPySessionError, ScyllaPyDBError);
+create_exception!(scyllapy.exceptions, ScyllaPyMappingError, ScyllaPyBaseError);
+create_exception!(
+    scyllapy.exceptions,
+    ScyllaPyQueryBuiderError,
+    ScyllaPyBaseError
+);
 
 /// Create module with exceptions.
 ///
@@ -15,7 +23,7 @@ create_exception!("scyllapy", ScyllaPyQueryBuiderErrror, ScyllaPyBaseError);
 /// # Errors
 ///
 /// May throw an error, if module cannot be constructed.
-pub fn module_constructor(py: Python<'_>, module: &PyModule) -> PyResult<()> {
+pub fn setup_module(py: Python<'_>, module: &PyModule) -> PyResult<()> {
     module.add("ScyllaPyBaseError", py.get_type::<ScyllaPyBaseError>())?;
     module.add("ScyllaPyDBError", py.get_type::<ScyllaPyDBError>())?;
     module.add(
@@ -31,8 +39,8 @@ pub fn module_constructor(py: Python<'_>, module: &PyModule) -> PyResult<()> {
         py.get_type::<ScyllaPyMappingError>(),
     )?;
     module.add(
-        "ScyllaPyQueryBuiderErrror",
-        py.get_type::<ScyllaPyQueryBuiderErrror>(),
+        "ScyllaPyQueryBuiderError",
+        py.get_type::<ScyllaPyQueryBuiderError>(),
     )?;
     Ok(())
 }
