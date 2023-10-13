@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, hash::BuildHasherDefault, sync::Arc};
 
 use futures::StreamExt;
 use pyo3::{
@@ -40,14 +40,17 @@ impl ScyllaPyQueryResult {
         &'a self,
         py: Python<'a>,
         limit: Option<usize>,
-    ) -> ScyllaPyResult<Option<Vec<HashMap<&'a str, &'a PyAny>>>> {
+    ) -> ScyllaPyResult<Option<Vec<rustc_hash::FxHashMap<&'a str, &'a PyAny>>>> {
         let Some(rows) = &self.inner.rows else {
             return Ok(None);
         };
         let specs = &self.inner.col_specs;
         let mut dumped_rows = Vec::new();
         for (row_index, row) in rows.iter().enumerate() {
-            let mut map = HashMap::new();
+            let mut map = HashMap::with_capacity_and_hasher(
+                specs.len(),
+                BuildHasherDefault::<rustc_hash::FxHasher>::default(),
+            );
             for (col_index, column) in row.columns.iter().enumerate() {
                 map.insert(
                     specs[col_index].name.as_str(),

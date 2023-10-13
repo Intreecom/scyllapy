@@ -1,4 +1,4 @@
-use std::{collections::HashMap, future::Future, str::FromStr};
+use std::{collections::HashMap, future::Future, hash::BuildHasherDefault, str::FromStr};
 
 use chrono::Duration;
 use pyo3::{
@@ -119,7 +119,7 @@ impl Value for ScyllaPyCQLDTO {
             ScyllaPyCQLDTO::Map(map) => map
                 .iter()
                 .cloned()
-                .collect::<HashMap<_, _>>()
+                .collect::<HashMap<_, _, BuildHasherDefault<rustc_hash::FxHasher>>>()
                 .serialize(buf),
             ScyllaPyCQLDTO::Timestamp(timestamp) => {
                 scylla::frame::value::Timestamp(*timestamp).serialize(buf)
@@ -502,7 +502,8 @@ pub fn parse_python_query_params(
         return Ok(values);
     } else if params.is_instance_of::<PyDict>() {
         if allow_dicts {
-            let dict = params.extract::<HashMap<&str, &PyAny>>()?;
+            let dict = params
+                .extract::<HashMap<&str, &PyAny, BuildHasherDefault<rustc_hash::FxHasher>>>()?;
             for (name, value) in dict {
                 values.add_named_value(name.to_lowercase().as_str(), &py_to_value(value)?)?;
             }
