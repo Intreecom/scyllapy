@@ -46,11 +46,12 @@ impl ScyllaPyLoadBalancingPolicy {
             if let Some(token) = token_aware {
                 policy_builer = policy_builer.token_aware(token);
             }
-            if let Some(rack) = prefer_rack {
-                policy_builer = policy_builer.prefer_rack(rack);
-            }
             if let Some(dc) = prefer_datacenter {
-                policy_builer = policy_builer.prefer_datacenter(dc);
+                if let Some(rack) = prefer_rack {
+                    policy_builer = policy_builer.prefer_datacenter_and_rack(dc, rack);
+                } else {
+                    policy_builer = policy_builer.prefer_datacenter(dc);
+                }
             }
             if let Some(shufle) = shuffling_replicas {
                 policy_builer = policy_builer.enable_shuffling_replicas(shufle);
