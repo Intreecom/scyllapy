@@ -18,6 +18,8 @@ pub enum ScyllaPyConsistency {
     LOCAL_QUORUM,
     EACH_QUORUM,
     LOCAL_ONE,
+    SERIAL,
+    LOCAL_SERIAL,
 }
 
 #[pyclass(name = "SerialConsistency")]
@@ -42,6 +44,8 @@ impl From<ScyllaPyConsistency> for Consistency {
             ScyllaPyConsistency::LOCAL_QUORUM => Self::LocalQuorum,
             ScyllaPyConsistency::EACH_QUORUM => Self::EachQuorum,
             ScyllaPyConsistency::LOCAL_ONE => Self::LocalOne,
+            ScyllaPyConsistency::SERIAL => Self::Serial,
+            ScyllaPyConsistency::LOCAL_SERIAL => Self::LocalSerial,
         }
     }
 }

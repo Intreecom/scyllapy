@@ -255,6 +255,8 @@ class Consistency:
     LOCAL_QUORUM: Consistency
     EACH_QUORUM: Consistency
     LOCAL_ONE: Consistency
+    SERIAL: Consistency
+    LOCAL_SERIAL: Consistency
 
 class SerialConsistency:
     """Serial consistency for query."""
