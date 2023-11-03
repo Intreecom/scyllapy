@@ -459,13 +459,46 @@ pub fn cql_to_py<'a>(
                 .getattr("time")?
                 .call_method1("fromisoformat", (time.format("%H:%M:%S%.6f").to_string(),))?)
         }
-        ColumnType::Custom(_)
-        | ColumnType::Varint
-        | ColumnType::Decimal
-        | ColumnType::UserDefinedType { .. } => Err(ScyllaPyError::ValueDowncastError(
-            col_name.into(),
-            "Unknown",
-        )),
+        ColumnType::UserDefinedType {
+            type_name,
+            keyspace,
+            field_types,
+        } => {
+            let mut fields: HashMap<&str, &ColumnType, _> = HashMap::with_capacity_and_hasher(
+                field_types.len(),
+                BuildHasherDefault::<rustc_hash::FxHasher>::default(),
+            );
+            for (field_name, field_type) in field_types {
+                fields.insert(field_name.as_str(), field_type);
+            }
+            let map_values = unwrapped_value
+                .as_udt()
+                .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "UDT"))?
+                .iter()
+                .map(|(key, val)| -> ScyllaPyResult<(&str, &'a PyAny)> {
+                    let column_type = fields.get(key.as_str()).ok_or_else(|| {
+                        ScyllaPyError::UDTDowncastError(
+                            format!("{keyspace}.{type_name}"),
+                            col_name.into(),
+                            format!("UDT field {key} is not defined in schema"),
+                        )
+                    })?;
+                    Ok((
+                        key.as_str(),
+                        cql_to_py(py, col_name, column_type, val.as_ref())?,
+                    ))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let res_map = PyDict::new(py);
+            for (key, value) in map_values {
+                res_map.set_item(key, value)?;
+            }
+            Ok(res_map)
+        }
+        ColumnType::Custom(_) | ColumnType::Varint | ColumnType::Decimal => Err(
+            ScyllaPyError::ValueDowncastError(col_name.into(), "Unknown"),
+        ),
     }
 }
 
