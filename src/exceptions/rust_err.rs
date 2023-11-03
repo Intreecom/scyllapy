@@ -44,6 +44,8 @@ pub enum ScyllaPyError {
     RowsDowncastError(String),
     #[error("Cannot parse value of column {0} as {1}.")]
     ValueDowncastError(String, &'static str),
+    #[error("Cannot downcast UDT {0} of column {1}. Reason: {2}.")]
+    UDTDowncastError(String, String, String),
     #[error("Query didn't suppose to return anything.")]
     NoReturnsError,
     #[error("Query doesn't have columns.")]
@@ -73,6 +75,7 @@ impl From<ScyllaPyError> for pyo3::PyErr {
             | ScyllaPyError::IpParseError(_) => ScyllaPyBindingError::new_err((err_desc,)),
             ScyllaPyError::RowsDowncastError(_)
             | ScyllaPyError::ValueDowncastError(_, _)
+            | ScyllaPyError::UDTDowncastError(_, _, _)
             | ScyllaPyError::NoReturnsError
             | ScyllaPyError::NoColumns => ScyllaPyMappingError::new_err((err_desc,)),
             ScyllaPyError::QueryBuilderError(_) => ScyllaPyQueryBuiderError::new_err((err_desc,)),

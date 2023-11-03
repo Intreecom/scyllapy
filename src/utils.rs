@@ -5,9 +5,12 @@ use pyo3::{
     types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyModule, PySet, PyString, PyTuple},
     IntoPy, Py, PyAny, PyObject, PyResult, Python, ToPyObject,
 };
-use scylla::frame::{
-    response::result::{ColumnType, CqlValue},
-    value::{SerializedValues, Value},
+use scylla::{
+    frame::{
+        response::result::{ColumnType, CqlValue},
+        value::{SerializedValues, Value},
+    },
+    BufMut,
 };
 
 use std::net::IpAddr;
@@ -96,6 +99,8 @@ pub enum ScyllaPyCQLDTO {
     Inet(IpAddr),
     List(Vec<ScyllaPyCQLDTO>),
     Map(Vec<(ScyllaPyCQLDTO, ScyllaPyCQLDTO)>),
+    // UDT holds serialized bytes according to the protocol.
+    Udt(Vec<u8>),
 }
 
 impl Value for ScyllaPyCQLDTO {
@@ -125,6 +130,10 @@ impl Value for ScyllaPyCQLDTO {
                 scylla::frame::value::Timestamp(*timestamp).serialize(buf)
             }
             ScyllaPyCQLDTO::Null => Option::<i16>::None.serialize(buf),
+            ScyllaPyCQLDTO::Udt(udt) => {
+                buf.extend(udt);
+                Ok(())
+            }
             ScyllaPyCQLDTO::Unset => scylla::frame::value::Unset.serialize(buf),
         }
     }
@@ -140,6 +149,7 @@ impl Value for ScyllaPyCQLDTO {
 ///
 /// May raise an error, if
 /// value cannot be converted or unnown type was passed.
+#[allow(clippy::too_many_lines)]
 pub fn py_to_value(item: &PyAny) -> ScyllaPyResult<ScyllaPyCQLDTO> {
     if item.is_none() {
         Ok(ScyllaPyCQLDTO::Null)
@@ -175,6 +185,32 @@ pub fn py_to_value(item: &PyAny) -> ScyllaPyResult<ScyllaPyCQLDTO> {
         ))
     } else if item.is_instance_of::<PyBytes>() {
         Ok(ScyllaPyCQLDTO::Bytes(item.extract::<Vec<u8>>()?))
+    } else if item.hasattr("__dump_udt__")? {
+        let dumped = item.call_method0("__dump_udt__")?;
+        let dumped_py = dumped.downcast::<PyList>().map_err(|err| {
+            ScyllaPyError::BindingError(format!(
+                "Cannot get UDT values. __dump_udt__ has returned not a list value. {err}"
+            ))
+        })?;
+        let mut buf = Vec::new();
+        // Here we put the size of UDT value.
+        // Now it's zero, but we will replace it after serialization.
+        buf.put_i32(0);
+        for val in dumped_py {
+            // Here we serialize all fields.
+            py_to_value(val)?.serialize(buf.as_mut()).map_err(|err| {
+                ScyllaPyError::BindingError(format!("Cannot serialize UDT field because of {err}"))
+            })?;
+        }
+        // Then we calculate the size of the UDT value, cast it to i32
+        // and put it in the beginning of the buffer.
+        let buf_len: i32 = buf.len().try_into().map_err(|_| {
+            ScyllaPyError::BindingError("Cannot serialize. UDT value is too big.".into())
+        })?;
+        // Here we also subtract 4 bytes, because we don't want to count
+        // size buffer itself.
+        buf[0..4].copy_from_slice(&(buf_len - 4).to_be_bytes()[..]);
+        Ok(ScyllaPyCQLDTO::Udt(buf))
     } else if item.get_type().name()? == "UUID" {
         Ok(ScyllaPyCQLDTO::Uuid(uuid::Uuid::parse_str(
             item.str()?.extract::<&str>()?,
@@ -459,13 +495,46 @@ pub fn cql_to_py<'a>(
                 .getattr("time")?
                 .call_method1("fromisoformat", (time.format("%H:%M:%S%.6f").to_string(),))?)
         }
-        ColumnType::Custom(_)
-        | ColumnType::Varint
-        | ColumnType::Decimal
-        | ColumnType::UserDefinedType { .. } => Err(ScyllaPyError::ValueDowncastError(
-            col_name.into(),
-            "Unknown",
-        )),
+        ColumnType::UserDefinedType {
+            type_name,
+            keyspace,
+            field_types,
+        } => {
+            let mut fields: HashMap<&str, &ColumnType, _> = HashMap::with_capacity_and_hasher(
+                field_types.len(),
+                BuildHasherDefault::<rustc_hash::FxHasher>::default(),
+            );
+            for (field_name, field_type) in field_types {
+                fields.insert(field_name.as_str(), field_type);
+            }
+            let map_values = unwrapped_value
+                .as_udt()
+                .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "UDT"))?
+                .iter()
+                .map(|(key, val)| -> ScyllaPyResult<(&str, &'a PyAny)> {
+                    let column_type = fields.get(key.as_str()).ok_or_else(|| {
+                        ScyllaPyError::UDTDowncastError(
+                            format!("{keyspace}.{type_name}"),
+                            col_name.into(),
+                            format!("UDT field {key} is not defined in schema"),
+                        )
+                    })?;
+                    Ok((
+                        key.as_str(),
+                        cql_to_py(py, col_name, column_type, val.as_ref())?,
+                    ))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let res_map = PyDict::new(py);
+            for (key, value) in map_values {
+                res_map.set_item(key, value)?;
+            }
+            Ok(res_map)
+        }
+        ColumnType::Custom(_) | ColumnType::Varint | ColumnType::Decimal => Err(
+            ScyllaPyError::ValueDowncastError(col_name.into(), "Unknown"),
+        ),
     }
 }
 
