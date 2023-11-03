@@ -128,3 +128,22 @@ async def test_nested_udts(scylla: Scylla) -> None:
 
     res = await scylla.execute(f"SELECT * FROM {table_name}")
     assert res.all() == [{"id": 1, "udt_col": asdict(udt_val)}]
+
+
+@pytest.mark.parametrize(
+    ["typ", "val"],
+    [
+        ("BIGINT", 1),
+        ("TINYINT", 1),
+        ("SMALLINT", 1),
+        ("INT", 1),
+        ("FLOAT", 1.0),
+        ("DOUBLE", 1.0),
+    ],
+)
+@pytest.mark.anyio
+async def test_autocast_positional(scylla: Scylla, typ: str, val: Any) -> None:
+    table_name = random_string(4)
+    await scylla.execute(f"CREATE TABLE {table_name}(id INT PRIMARY KEY, val {typ})")
+    prepared = await scylla.prepare(f"INSERT INTO {table_name}(id, val) VALUES (?, ?)")
+    await scylla.execute(prepared, [1, val])

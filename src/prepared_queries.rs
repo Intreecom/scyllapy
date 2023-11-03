@@ -4,7 +4,7 @@ use scylla::prepared_statement::PreparedStatement;
 #[pyclass(name = "PreparedQuery")]
 #[derive(Clone, Debug)]
 pub struct ScyllaPyPreparedQuery {
-    inner: PreparedStatement,
+    pub inner: PreparedStatement,
 }
 
 impl From<PreparedStatement> for ScyllaPyPreparedQuery {

@@ -12,6 +12,7 @@ use scylla::{
     },
     BufMut,
 };
+use scylla_cql::frame::response::result::ColumnSpec;
 
 use std::net::IpAddr;
 
@@ -150,7 +151,10 @@ impl Value for ScyllaPyCQLDTO {
 /// May raise an error, if
 /// value cannot be converted or unnown type was passed.
 #[allow(clippy::too_many_lines)]
-pub fn py_to_value(item: &PyAny) -> ScyllaPyResult<ScyllaPyCQLDTO> {
+pub fn py_to_value(
+    item: &PyAny,
+    column_type: Option<&ColumnType>,
+) -> ScyllaPyResult<ScyllaPyCQLDTO> {
     if item.is_none() {
         Ok(ScyllaPyCQLDTO::Null)
     } else if item.is_instance_of::<PyString>() {
@@ -160,9 +164,20 @@ pub fn py_to_value(item: &PyAny) -> ScyllaPyResult<ScyllaPyCQLDTO> {
     } else if item.is_instance_of::<PyBool>() {
         Ok(ScyllaPyCQLDTO::Bool(item.extract::<bool>()?))
     } else if item.is_instance_of::<PyInt>() {
-        Ok(ScyllaPyCQLDTO::Int(item.extract::<i32>()?))
+        match column_type {
+            Some(ColumnType::TinyInt) => Ok(ScyllaPyCQLDTO::TinyInt(item.extract::<i8>()?)),
+            Some(ColumnType::SmallInt) => Ok(ScyllaPyCQLDTO::SmallInt(item.extract::<i16>()?)),
+            Some(ColumnType::BigInt) => Ok(ScyllaPyCQLDTO::BigInt(item.extract::<i64>()?)),
+            Some(ColumnType::Counter) => Ok(ScyllaPyCQLDTO::Counter(item.extract::<i64>()?)),
+            Some(_) | None => Ok(ScyllaPyCQLDTO::Int(item.extract::<i32>()?)),
+        }
     } else if item.is_instance_of::<PyFloat>() {
-        Ok(ScyllaPyCQLDTO::Float(eq_float::F32(item.extract::<f32>()?)))
+        match column_type {
+            Some(ColumnType::Double) => Ok(ScyllaPyCQLDTO::Double(eq_float::F64(
+                item.extract::<f64>()?,
+            ))),
+            Some(_) | None => Ok(ScyllaPyCQLDTO::Float(eq_float::F32(item.extract::<f32>()?))),
+        }
     } else if item.is_instance_of::<SmallInt>() {
         Ok(ScyllaPyCQLDTO::SmallInt(
             item.extract::<SmallInt>()?.get_value(),
@@ -198,9 +213,13 @@ pub fn py_to_value(item: &PyAny) -> ScyllaPyResult<ScyllaPyCQLDTO> {
         buf.put_i32(0);
         for val in dumped_py {
             // Here we serialize all fields.
-            py_to_value(val)?.serialize(buf.as_mut()).map_err(|err| {
-                ScyllaPyError::BindingError(format!("Cannot serialize UDT field because of {err}"))
-            })?;
+            py_to_value(val, None)?
+                .serialize(buf.as_mut())
+                .map_err(|err| {
+                    ScyllaPyError::BindingError(format!(
+                        "Cannot serialize UDT field because of {err}"
+                    ))
+                })?;
         }
         // Then we calculate the size of the UDT value, cast it to i32
         // and put it in the beginning of the buffer.
@@ -245,7 +264,7 @@ pub fn py_to_value(item: &PyAny) -> ScyllaPyResult<ScyllaPyCQLDTO> {
     {
         let mut items = Vec::new();
         for inner in item.iter()? {
-            items.push(py_to_value(inner?)?);
+            items.push(py_to_value(inner?, column_type)?);
         }
         Ok(ScyllaPyCQLDTO::List(items))
     } else if item.is_instance_of::<PyDict>() {
@@ -258,8 +277,8 @@ pub fn py_to_value(item: &PyAny) -> ScyllaPyResult<ScyllaPyCQLDTO> {
                 ScyllaPyError::BindingError(format!("Cannot cast to tuple: {err}"))
             })?;
             items.push((
-                py_to_value(item_tuple.get_item(0)?)?,
-                py_to_value(item_tuple.get_item(1)?)?,
+                py_to_value(item_tuple.get_item(0)?, column_type)?,
+                py_to_value(item_tuple.get_item(1)?, column_type)?,
             ));
         }
         Ok(ScyllaPyCQLDTO::Map(items))
@@ -553,6 +572,7 @@ pub fn cql_to_py<'a>(
 pub fn parse_python_query_params(
     params: Option<&PyAny>,
     allow_dicts: bool,
+    col_spec: Option<&[ColumnSpec]>,
 ) -> ScyllaPyResult<SerializedValues> {
     let mut values = SerializedValues::new();
 
@@ -564,17 +584,30 @@ pub fn parse_python_query_params(
     // Otherwise it parses dict to named parameters.
     if params.is_instance_of::<PyList>() || params.is_instance_of::<PyTuple>() {
         let params = params.extract::<Vec<&PyAny>>()?;
-        for param in params {
-            let py_dto = py_to_value(param)?;
+        for (index, param) in params.iter().enumerate() {
+            let coltype = col_spec.and_then(|specs| specs.get(index)).map(|f| &f.typ);
+            let py_dto = py_to_value(param, coltype)?;
             values.add_value(&py_dto)?;
         }
         return Ok(values);
     } else if params.is_instance_of::<PyDict>() {
         if allow_dicts {
+            let types_map = col_spec
+                .map(|specs| {
+                    specs
+                        .iter()
+                        .map(|spec| (spec.name.as_str(), spec.typ.clone()))
+                        .collect::<HashMap<_, _, BuildHasherDefault<rustc_hash::FxHasher>>>()
+                })
+                .unwrap_or_default();
+            // let map = HashMap::with_capacity_and_hasher(, hasher)
             let dict = params
                 .extract::<HashMap<&str, &PyAny, BuildHasherDefault<rustc_hash::FxHasher>>>()?;
             for (name, value) in dict {
-                values.add_named_value(name.to_lowercase().as_str(), &py_to_value(value)?)?;
+                values.add_named_value(
+                    name.to_lowercase().as_str(),
+                    &py_to_value(value, types_map.get(name))?,
+                )?;
             }
             return Ok(values);
         }
