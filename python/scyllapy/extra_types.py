@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Any
+from typing import Any, List
 
 from ._internal.extra_types import BigInt, Counter, Double, SmallInt, TinyInt, Unset
 
@@ -19,7 +19,7 @@ class ScyllaPyUDT:
     It can be further extended to support other model types.
     """
 
-    def __dump_udt__(self) -> list[Any]:
+    def __dump_udt__(self) -> List[Any]:
         """
         Method to dump UDT models to a dict.
 
