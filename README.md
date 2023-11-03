@@ -324,6 +324,55 @@ async def execute(scylla: Scylla) -> None:
     )
 ```
 
+## User defined types
+
+We also support user defined types. You can pass them as a parameter to query.
+Or parse it as a model in response.
+
+Here's binding example. Imagine we have defined a type in scylla like this:
+
+```cql
+CREATE TYPE IF NOT EXISTS test (
+    id int,
+    name text
+);
+```
+
+Now we need to define a model for it in python.
+
+```python
+from dataclasses import dataclass
+from scyllapy.extra_types import ScyllaPyUDT
+
+@dataclass
+class TestUDT(ScyllaPyUDT):
+    # Always define fields in the same order as in scylla.
+    # Otherwise you will get an error, or wrong data.
+    id: int
+    name: str
+
+async def execute(scylla: Scylla) -> None:
+    await scylla.execute(
+        "INSERT INTO table(id, udt_col) VALUES (?, ?)",
+        [1, TestUDT(id=1, name="test")],
+    )
+
+```
+
+We also support pydantic based models. Decalre them like this:
+
+```python
+from pydantic import BaseModel
+from scyllapy.extra_types import ScyllaPyUDT
+
+
+class TestUDT(BaseModel, ScyllaPyUDT):
+    # Always define fields in the same order as in scylla.
+    # Otherwise you will get an error, or wrong data.
+    id: int
+    name: str
+
+```
 
 # Query building
 

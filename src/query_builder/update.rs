@@ -130,7 +130,7 @@ impl Update {
         value: &'a PyAny,
     ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         slf.assignments_.push(UpdateAssignment::Simple(name));
-        slf.values_.push(py_to_value(value)?);
+        slf.values_.push(py_to_value(value, None)?);
         Ok(slf)
     }
 
@@ -147,7 +147,7 @@ impl Update {
     ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         slf.assignments_
             .push(UpdateAssignment::Inc(name.clone(), name));
-        slf.values_.push(py_to_value(value)?);
+        slf.values_.push(py_to_value(value, None)?);
         Ok(slf)
     }
 
@@ -164,7 +164,7 @@ impl Update {
     ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         slf.assignments_
             .push(UpdateAssignment::Dec(name.clone(), name));
-        slf.values_.push(py_to_value(value)?);
+        slf.values_.push(py_to_value(value, None)?);
         Ok(slf)
     }
     /// Add where clause.
@@ -187,7 +187,7 @@ impl Update {
         slf.where_clauses_.push(clause);
         if let Some(vals) = values {
             for value in vals {
-                slf.where_values_.push(py_to_value(value)?);
+                slf.where_values_.push(py_to_value(value, None)?);
             }
         }
         Ok(slf)
@@ -248,7 +248,7 @@ impl Update {
     ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         let parsed_values = if let Some(vals) = values {
             vals.iter()
-                .map(|item| py_to_value(item))
+                .map(|item| py_to_value(item, None))
                 .collect::<Result<Vec<_>, _>>()?
         } else {
             vec![]

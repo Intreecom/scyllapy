@@ -114,7 +114,7 @@ impl Insert {
         if value.is_none() {
             slf.values_.push(ScyllaPyCQLDTO::Unset);
         } else {
-            slf.values_.push(py_to_value(value)?);
+            slf.values_.push(py_to_value(value, None)?);
         }
         Ok(slf)
     }
