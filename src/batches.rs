@@ -121,7 +121,7 @@ impl ScyllaPyInlineBatch {
         self.inner.append_statement(query);
         if let Some(passed_params) = values {
             self.values
-                .push(parse_python_query_params(Some(passed_params), false)?);
+                .push(parse_python_query_params(Some(passed_params), false, None)?);
         } else {
             self.values.push(SerializedValues::new());
         }

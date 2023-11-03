@@ -153,7 +153,7 @@ impl Select {
         slf.where_clauses_.push(clause);
         if let Some(vals) = values {
             for value in vals {
-                slf.values_.push(py_to_value(value)?);
+                slf.values_.push(py_to_value(value, None)?);
             }
         }
         Ok(slf)

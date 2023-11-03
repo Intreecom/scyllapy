@@ -290,9 +290,13 @@ impl Scylla {
         params: Option<&'a PyAny>,
         paged: bool,
     ) -> ScyllaPyResult<&'a PyAny> {
+        let mut col_spec = None;
         // We need to prepare parameter we're going to use
         // in query.
-        let query_params = parse_python_query_params(params, true)?;
+        if let ExecuteInput::PreparedQuery(prepared) = &query {
+            col_spec = Some(prepared.inner.get_prepared_metadata().col_specs.as_ref());
+        }
+        let query_params = parse_python_query_params(params, true, col_spec)?;
         // We need this clone, to safely share the session between threads.
         let (query, prepared) = match query {
             ExecuteInput::Text(txt) => (Some(Query::new(txt)), None),
@@ -322,7 +326,11 @@ impl Scylla {
                 let mut batch_params = Vec::new();
                 if let Some(passed_params) = params {
                     for query_params in passed_params {
-                        batch_params.push(parse_python_query_params(Some(query_params), false)?);
+                        batch_params.push(parse_python_query_params(
+                            Some(query_params),
+                            false,
+                            None,
+                        )?);
                     }
                 }
                 (batch.into(), batch_params)

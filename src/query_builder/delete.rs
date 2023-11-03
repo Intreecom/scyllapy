@@ -110,7 +110,7 @@ impl Delete {
         slf.where_clauses_.push(clause);
         if let Some(vals) = values {
             for value in vals {
-                slf.values_.push(py_to_value(value)?);
+                slf.values_.push(py_to_value(value, None)?);
             }
         }
         Ok(slf)
@@ -148,7 +148,7 @@ impl Delete {
     ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         let parsed_values = if let Some(vals) = values {
             vals.iter()
-                .map(|item| py_to_value(item))
+                .map(|item| py_to_value(item, None))
                 .collect::<Result<Vec<_>, _>>()?
         } else {
             vec![]
