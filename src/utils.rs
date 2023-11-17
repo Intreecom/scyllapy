@@ -169,14 +169,22 @@ pub fn py_to_value(
             Some(ColumnType::SmallInt) => Ok(ScyllaPyCQLDTO::SmallInt(item.extract::<i16>()?)),
             Some(ColumnType::BigInt) => Ok(ScyllaPyCQLDTO::BigInt(item.extract::<i64>()?)),
             Some(ColumnType::Counter) => Ok(ScyllaPyCQLDTO::Counter(item.extract::<i64>()?)),
-            Some(_) | None => Ok(ScyllaPyCQLDTO::Int(item.extract::<i32>()?)),
+            Some(ColumnType::Int) | None => Ok(ScyllaPyCQLDTO::Int(item.extract::<i32>()?)),
+            Some(_) => Err(ScyllaPyError::BindingError(format!(
+                "Unsupported type for parameter binding: {column_type:?}"
+            ))),
         }
     } else if item.is_instance_of::<PyFloat>() {
         match column_type {
             Some(ColumnType::Double) => Ok(ScyllaPyCQLDTO::Double(eq_float::F64(
                 item.extract::<f64>()?,
             ))),
-            Some(_) | None => Ok(ScyllaPyCQLDTO::Float(eq_float::F32(item.extract::<f32>()?))),
+            Some(ColumnType::Float) | None => {
+                Ok(ScyllaPyCQLDTO::Float(eq_float::F32(item.extract::<f32>()?)))
+            }
+            Some(_) => Err(ScyllaPyError::BindingError(format!(
+                "Unsupported type for parameter binding: {column_type:?}"
+            ))),
         }
     } else if item.is_instance_of::<SmallInt>() {
         Ok(ScyllaPyCQLDTO::SmallInt(
