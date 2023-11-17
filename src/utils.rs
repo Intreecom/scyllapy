@@ -276,10 +276,17 @@ pub fn py_to_value(
             let item_tuple = dict_item.downcast::<PyTuple>().map_err(|err| {
                 ScyllaPyError::BindingError(format!("Cannot cast to tuple: {err}"))
             })?;
-            items.push((
-                py_to_value(item_tuple.get_item(0)?, column_type)?,
-                py_to_value(item_tuple.get_item(1)?, column_type)?,
-            ));
+            if let Some(ColumnType::Map(key_type, val_type)) = column_type {
+                items.push((
+                    py_to_value(item_tuple.get_item(0)?, Some(key_type.as_ref()))?,
+                    py_to_value(item_tuple.get_item(1)?, Some(val_type.as_ref()))?,
+                ));
+            } else {
+                items.push((
+                    py_to_value(item_tuple.get_item(0)?, column_type)?,
+                    py_to_value(item_tuple.get_item(1)?, column_type)?,
+                ));
+            }
         }
         Ok(ScyllaPyCQLDTO::Map(items))
     } else {
