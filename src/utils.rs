@@ -99,6 +99,8 @@ pub enum ScyllaPyCQLDTO {
     Uuid(uuid::Uuid),
     Inet(IpAddr),
     List(Vec<ScyllaPyCQLDTO>),
+    Set(Vec<ScyllaPyCQLDTO>),
+    Tuple(Vec<ScyllaPyCQLDTO>),
     Map(Vec<(ScyllaPyCQLDTO, ScyllaPyCQLDTO)>),
     // UDT holds serialized bytes according to the protocol.
     Udt(Vec<u8>),
@@ -118,6 +120,8 @@ impl Value for ScyllaPyCQLDTO {
             ScyllaPyCQLDTO::Uuid(uuid) => uuid.serialize(buf),
             ScyllaPyCQLDTO::Inet(inet) => inet.serialize(buf),
             ScyllaPyCQLDTO::List(list) => list.serialize(buf),
+            ScyllaPyCQLDTO::Set(set) => set.serialize(buf),
+            ScyllaPyCQLDTO::Tuple(tuple) => tuple.serialize(buf),
             ScyllaPyCQLDTO::Counter(counter) => counter.serialize(buf),
             ScyllaPyCQLDTO::TinyInt(tinyint) => tinyint.serialize(buf),
             ScyllaPyCQLDTO::Date(date) => date.serialize(buf),
@@ -266,15 +270,34 @@ pub fn py_to_value(
         #[allow(clippy::cast_possible_truncation)]
         let timestamp = Duration::milliseconds(milliseconds.trunc() as i64);
         Ok(ScyllaPyCQLDTO::Timestamp(timestamp))
-    } else if item.is_instance_of::<PyList>()
-        || item.is_instance_of::<PyTuple>()
-        || item.is_instance_of::<PySet>()
-    {
+    } else if item.is_instance_of::<PyList>() || item.is_instance_of::<PySet>() {
         let mut items = Vec::new();
         for inner in item.iter()? {
-            items.push(py_to_value(inner?, column_type)?);
+            if let Some(ColumnType::List(actual_type)) | Some(ColumnType::Set(actual_type)) =
+                column_type.as_ref()
+            {
+                items.push(py_to_value(inner?, Some(actual_type))?);
+            } else {
+                items.push(py_to_value(inner?, column_type)?);
+            }
         }
         Ok(ScyllaPyCQLDTO::List(items))
+    } else if item.is_instance_of::<PyTuple>() {
+        let tuple = item
+            .downcast::<PyTuple>()
+            .map_err(|err| ScyllaPyError::BindingError(format!("Cannot cast to tuple: {err}")))?;
+        let mut items = Vec::new();
+        if let Some(ColumnType::Tuple(types)) = column_type {
+            for (index, r#type) in types.iter().enumerate() {
+                let value = tuple.get_item(index)?;
+                items.push(py_to_value(value, Some(r#type))?);
+            }
+        } else {
+            for value in tuple.iter() {
+                items.push(py_to_value(value, column_type)?);
+            }
+        }
+        Ok(ScyllaPyCQLDTO::Tuple(items))
     } else if item.is_instance_of::<PyDict>() {
         let dict = item
             .downcast::<PyDict>()
@@ -319,7 +342,7 @@ pub fn py_to_value(
 /// # Errors
 ///
 /// This function can throw an error, if it was unable
-/// to parse thr type, or if type is not supported.
+/// to parse the type, or if type is not supported.
 #[allow(clippy::too_many_lines)]
 pub fn cql_to_py<'a>(
     py: Python<'a>,
