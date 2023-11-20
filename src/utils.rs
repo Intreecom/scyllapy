@@ -99,6 +99,8 @@ pub enum ScyllaPyCQLDTO {
     Uuid(uuid::Uuid),
     Inet(IpAddr),
     List(Vec<ScyllaPyCQLDTO>),
+    Set(Vec<ScyllaPyCQLDTO>),
+    Tuple(Vec<ScyllaPyCQLDTO>),
     Map(Vec<(ScyllaPyCQLDTO, ScyllaPyCQLDTO)>),
     // UDT holds serialized bytes according to the protocol.
     Udt(Vec<u8>),
@@ -118,6 +120,8 @@ impl Value for ScyllaPyCQLDTO {
             ScyllaPyCQLDTO::Uuid(uuid) => uuid.serialize(buf),
             ScyllaPyCQLDTO::Inet(inet) => inet.serialize(buf),
             ScyllaPyCQLDTO::List(list) => list.serialize(buf),
+            ScyllaPyCQLDTO::Set(set) => set.serialize(buf),
+            ScyllaPyCQLDTO::Tuple(tuple) => tuple.serialize(buf),
             ScyllaPyCQLDTO::Counter(counter) => counter.serialize(buf),
             ScyllaPyCQLDTO::TinyInt(tinyint) => tinyint.serialize(buf),
             ScyllaPyCQLDTO::Date(date) => date.serialize(buf),
@@ -169,14 +173,22 @@ pub fn py_to_value(
             Some(ColumnType::SmallInt) => Ok(ScyllaPyCQLDTO::SmallInt(item.extract::<i16>()?)),
             Some(ColumnType::BigInt) => Ok(ScyllaPyCQLDTO::BigInt(item.extract::<i64>()?)),
             Some(ColumnType::Counter) => Ok(ScyllaPyCQLDTO::Counter(item.extract::<i64>()?)),
-            Some(_) | None => Ok(ScyllaPyCQLDTO::Int(item.extract::<i32>()?)),
+            Some(ColumnType::Int) | None => Ok(ScyllaPyCQLDTO::Int(item.extract::<i32>()?)),
+            Some(_) => Err(ScyllaPyError::BindingError(format!(
+                "Unsupported type for parameter binding: {column_type:?}"
+            ))),
         }
     } else if item.is_instance_of::<PyFloat>() {
         match column_type {
             Some(ColumnType::Double) => Ok(ScyllaPyCQLDTO::Double(eq_float::F64(
                 item.extract::<f64>()?,
             ))),
-            Some(_) | None => Ok(ScyllaPyCQLDTO::Float(eq_float::F32(item.extract::<f32>()?))),
+            Some(ColumnType::Float) | None => {
+                Ok(ScyllaPyCQLDTO::Float(eq_float::F32(item.extract::<f32>()?)))
+            }
+            Some(_) => Err(ScyllaPyError::BindingError(format!(
+                "Unsupported type for parameter binding: {column_type:?}"
+            ))),
         }
     } else if item.is_instance_of::<SmallInt>() {
         Ok(ScyllaPyCQLDTO::SmallInt(
@@ -258,15 +270,34 @@ pub fn py_to_value(
         #[allow(clippy::cast_possible_truncation)]
         let timestamp = Duration::milliseconds(milliseconds.trunc() as i64);
         Ok(ScyllaPyCQLDTO::Timestamp(timestamp))
-    } else if item.is_instance_of::<PyList>()
-        || item.is_instance_of::<PyTuple>()
-        || item.is_instance_of::<PySet>()
-    {
+    } else if item.is_instance_of::<PyList>() || item.is_instance_of::<PySet>() {
         let mut items = Vec::new();
         for inner in item.iter()? {
-            items.push(py_to_value(inner?, column_type)?);
+            if let Some(ColumnType::List(actual_type)) | Some(ColumnType::Set(actual_type)) =
+                column_type.as_ref()
+            {
+                items.push(py_to_value(inner?, Some(actual_type))?);
+            } else {
+                items.push(py_to_value(inner?, column_type)?);
+            }
         }
         Ok(ScyllaPyCQLDTO::List(items))
+    } else if item.is_instance_of::<PyTuple>() {
+        let tuple = item
+            .downcast::<PyTuple>()
+            .map_err(|err| ScyllaPyError::BindingError(format!("Cannot cast to tuple: {err}")))?;
+        let mut items = Vec::new();
+        if let Some(ColumnType::Tuple(types)) = column_type {
+            for (index, r#type) in types.iter().enumerate() {
+                let value = tuple.get_item(index)?;
+                items.push(py_to_value(value, Some(r#type))?);
+            }
+        } else {
+            for value in tuple.iter() {
+                items.push(py_to_value(value, column_type)?);
+            }
+        }
+        Ok(ScyllaPyCQLDTO::Tuple(items))
     } else if item.is_instance_of::<PyDict>() {
         let dict = item
             .downcast::<PyDict>()
@@ -276,10 +307,17 @@ pub fn py_to_value(
             let item_tuple = dict_item.downcast::<PyTuple>().map_err(|err| {
                 ScyllaPyError::BindingError(format!("Cannot cast to tuple: {err}"))
             })?;
-            items.push((
-                py_to_value(item_tuple.get_item(0)?, column_type)?,
-                py_to_value(item_tuple.get_item(1)?, column_type)?,
-            ));
+            if let Some(ColumnType::Map(key_type, val_type)) = column_type {
+                items.push((
+                    py_to_value(item_tuple.get_item(0)?, Some(key_type.as_ref()))?,
+                    py_to_value(item_tuple.get_item(1)?, Some(val_type.as_ref()))?,
+                ));
+            } else {
+                items.push((
+                    py_to_value(item_tuple.get_item(0)?, column_type)?,
+                    py_to_value(item_tuple.get_item(1)?, column_type)?,
+                ));
+            }
         }
         Ok(ScyllaPyCQLDTO::Map(items))
     } else {
@@ -304,7 +342,7 @@ pub fn py_to_value(
 /// # Errors
 ///
 /// This function can throw an error, if it was unable
-/// to parse thr type, or if type is not supported.
+/// to parse the type, or if type is not supported.
 #[allow(clippy::too_many_lines)]
 pub fn cql_to_py<'a>(
     py: Python<'a>,

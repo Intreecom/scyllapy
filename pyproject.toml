@@ -17,7 +17,6 @@ classifiers = [
     "Topic :: Database :: Front-Ends",
 ]
 
-
 [tool.maturin]
 python-source = "python"
 module-name = "scyllapy._internal"
@@ -105,4 +104,4 @@ convention = "pep257"
 ignore-decorators = ["typing.overload"]
 
 [tool.ruff.pylint]
-allow-magic-value-types = ["int", "str", "float", "tuple"]
+allow-magic-value-types = ["int", "str", "float"]
