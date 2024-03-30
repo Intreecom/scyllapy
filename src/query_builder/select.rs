@@ -14,7 +14,7 @@ use crate::{
 };
 
 use super::utils::{pretty_build, Timeout};
-use scylla::frame::value::SerializedValues;
+use scylla::frame::value::LegacySerializedValues;
 
 #[pyclass]
 #[derive(Clone, Debug, Default)]
@@ -255,14 +255,14 @@ impl Select {
     ///
     /// Adds current query to batch.
     ///
-    /// # Error
+    /// # Errors
     ///
     /// Returns error if values cannot be passed to batch.
     pub fn add_to_batch(&self, batch: &mut ScyllaPyInlineBatch) -> ScyllaPyResult<()> {
         let mut query = Query::new(self.build_query());
         self.request_params_.apply_to_query(&mut query);
 
-        let mut serialized = SerializedValues::new();
+        let mut serialized = LegacySerializedValues::new();
         for val in self.values_.clone() {
             serialized.add_value(&val)?;
         }

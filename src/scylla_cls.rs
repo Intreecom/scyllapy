@@ -67,11 +67,13 @@ impl Scylla {
             if paged {
                 match (query, prepared) {
                     (Some(query), None) => Ok(ScyllaPyQueryReturns::IterableQueryResult(
-                        ScyllaPyIterableQueryResult::new(session.query_iter(query, values).await?),
+                        ScyllaPyIterableQueryResult::new(
+                            session.query_iter(query, values.serialized()?).await?,
+                        ),
                     )),
                     (None, Some(prepared)) => Ok(ScyllaPyQueryReturns::IterableQueryResult(
                         ScyllaPyIterableQueryResult::new(
-                            session.execute_iter(prepared, values).await?,
+                            session.execute_iter(prepared, values.serialized()?).await?,
                         ),
                     )),
                     _ => Err(ScyllaPyError::SessionError(
@@ -81,11 +83,13 @@ impl Scylla {
             } else {
                 match (query, prepared) {
                     (Some(query), None) => Ok(ScyllaPyQueryReturns::QueryResult(
-                        ScyllaPyQueryResult::new(session.query(query, values).await?),
+                        ScyllaPyQueryResult::new(session.query(query, values.serialized()?).await?),
                     )),
-                    (None, Some(prepared)) => Ok(ScyllaPyQueryReturns::QueryResult(
-                        ScyllaPyQueryResult::new(session.execute(&prepared, values).await?),
-                    )),
+                    (None, Some(prepared)) => {
+                        Ok(ScyllaPyQueryReturns::QueryResult(ScyllaPyQueryResult::new(
+                            session.execute(&prepared, values.serialized()?).await?,
+                        )))
+                    }
                     _ => Err(ScyllaPyError::SessionError(
                         "You should pass either query or prepared query.".into(),
                     )),
@@ -246,7 +250,7 @@ impl Scylla {
                     session_builder.connection_timeout(Duration::from_secs(connection_timeout));
             }
             let mut session_guard = scylla_session.write().await;
-            *session_guard = Some(session_builder.build().await?);
+            *session_guard = Some(Box::pin(session_builder.build()).await?);
             Ok(())
         })
     }
@@ -309,6 +313,10 @@ impl Scylla {
     /// Execute a batch statement.
     ///
     /// This function takes a batch and list of lists of params.
+    ///
+    /// # Errors
+    ///
+    /// Can result in an error in any case, when something goes wrong.
     #[pyo3(signature = (batch, params = None))]
     pub fn batch<'a>(
         &'a self,
@@ -357,6 +365,10 @@ impl Scylla {
     ///
     /// After preparation it returns a prepared
     /// query, that you can use later.
+    ///
+    /// # Errors
+    ///
+    /// May return an error, if session is not initialized.
     pub fn prepare<'a>(
         &'a self,
         python: Python<'a>,
