@@ -7,7 +7,7 @@ use pyo3::{
 use scylla::{
     frame::{
         response::result::{ColumnSpec, ColumnType, CqlValue},
-        value::{LegacySerializedValues, Value},
+        value::{CqlDuration, LegacySerializedValues, Value},
     },
     BufMut,
 };
@@ -93,6 +93,11 @@ pub enum ScyllaPyCQLDTO {
     Bool(bool),
     Double(eq_float::F64),
     Decimal(bigdecimal_04::BigDecimal),
+    Duration {
+        months: i32,
+        days: i32,
+        nanoseconds: i64,
+    },
     Float(eq_float::F32),
     Bytes(Vec<u8>),
     Date(chrono::NaiveDate),
@@ -139,6 +144,16 @@ impl Value for ScyllaPyCQLDTO {
             }
             ScyllaPyCQLDTO::Decimal(decimal) => decimal.serialize(buf),
             ScyllaPyCQLDTO::Unset => scylla::frame::value::Unset.serialize(buf),
+            ScyllaPyCQLDTO::Duration {
+                months,
+                days,
+                nanoseconds,
+            } => CqlDuration {
+                months: *months,
+                days: *days,
+                nanoseconds: *nanoseconds,
+            }
+            .serialize(buf),
         }
     }
 }
@@ -266,6 +281,16 @@ pub fn py_to_value(
             ScyllaPyError::BindingError("Cannot convert datetime to timestamp.".into()),
         )?;
         Ok(ScyllaPyCQLDTO::Timestamp(timestamp))
+    } else if item.get_type().name()? == "relativedelta" {
+        let months = item.getattr("months")?.extract::<i32>()?;
+        let days = item.getattr("days")?.extract::<i32>()?;
+        let nanoseconds = item.getattr("microseconds")?.extract::<i64>()? * 1_000
+            + item.getattr("seconds")?.extract::<i64>()? * 1_000_000;
+        Ok(ScyllaPyCQLDTO::Duration {
+            months,
+            days,
+            nanoseconds,
+        })
     } else if item.is_instance_of::<PyList>()
         || item.is_instance_of::<PyTuple>()
         || item.is_instance_of::<PySet>()
@@ -601,7 +626,17 @@ pub fn cql_to_py<'a>(
                 .getattr("Decimal")?
                 .call1((decimal.to_scientific_notation(),))?)
         }
-        ColumnType::Custom(_) | ColumnType::Varint => Err(ScyllaPyError::ValueDowncastError(
+        ColumnType::Varint => {
+            let bigint: bigdecimal_04::num_bigint::BigInt = match unwrapped_value {
+                CqlValue::Varint(inner) => inner.clone().into(),
+                _ => return Err(ScyllaPyError::ValueDowncastError(col_name.into(), "Varint")),
+            };
+            Ok(py
+                .import("builtins")?
+                .getattr("int")?
+                .call1((bigint.to_string(),))?)
+        }
+        ColumnType::Custom(_) => Err(ScyllaPyError::ValueDowncastError(
             col_name.into(),
             "Unknown",
         )),

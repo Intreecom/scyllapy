@@ -89,6 +89,35 @@ new_query = query.with_consistency(Consistency.ALL)
 
 All `with_` methods create new query, copying all other parameters.
 
+Here's the list of scylla types and corresponding python types that you should use while passing parameters to queries:
+
+| Scylla type | Python type            |
+| ----------- | ---------------------- |
+| int         | int                    |
+| tinyint     | extra_types.TinyInt    |
+| bigint      | extra_types.BigInt     |
+| varint      | any int type           |
+| float       | float                  |
+| double      | extra_types.Double     |
+| decimal     | decimal.Decimal        |
+| ascii       | str                    |
+| text        | str                    |
+| varchar     | str                    |
+| blob        | bytes                  |
+| boolean     | bool                   |
+| counter     | extra_types.Counter    |
+| date        | datetime.date          |
+| uuid        | uuid.UUID              |
+| inet        | ipaddress              |
+| time        | datetime.time          |
+| timestamp   | datetime.datetime      |
+| duration    | dateutil.relativedelta |
+
+All types from `extra_types` module are used to eliminate any possible ambiguity while passing parameters to queries. You can find more information about them in `Extra types` section.
+
+We use relative delta from `dateutil` for duration, because it's the only way to represent it in python. Since scylla operates with months, days and nanosecond, there's no way we can represent it in python, becuase months are variable length.
+
+
 ## Named parameters
 
 Also, you can provide named parameters to querties, by using name
