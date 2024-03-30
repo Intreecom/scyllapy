@@ -1,5 +1,5 @@
 use pyo3::{pyclass, pymethods, types::PyDict, PyAny, PyRefMut, Python};
-use scylla::query::Query;
+use scylla::{frame::value::LegacySerializedValues, query::Query};
 
 use crate::{
     batches::ScyllaPyInlineBatch,
@@ -10,7 +10,6 @@ use crate::{
 };
 
 use super::utils::{pretty_build, IfCluase, Timeout};
-use scylla::frame::value::SerializedValues;
 #[derive(Clone, Debug)]
 enum UpdateAssignment {
     Simple(String),
@@ -58,7 +57,7 @@ impl Update {
                 "Update should contain at least one where clause",
             ));
         }
-        let params = vec![
+        let params = [
             self.timestamp_
                 .map(|timestamp| format!("TIMESTAMP {timestamp}")),
             self.ttl_.map(|ttl| format!("TTL {ttl}")),
@@ -136,7 +135,7 @@ impl Update {
 
     /// Increment column value.
     ///
-    /// # Error
+    /// # Errors
     ///
     /// If cannot convert python type
     /// to appropriate rust type.
@@ -292,7 +291,7 @@ impl Update {
     ///
     /// Adds current query to batch.
     ///
-    /// # Error
+    /// # Errors
     ///
     /// May result into error if query cannot be build.
     /// Or values cannot be passed to batch.
@@ -308,7 +307,7 @@ impl Update {
             values
         };
 
-        let mut serialized = SerializedValues::new();
+        let mut serialized = LegacySerializedValues::new();
         for val in values {
             serialized.add_value(&val)?;
         }

@@ -1,11 +1,13 @@
 use pyo3::{pyclass, pymethods, types::PyDict, PyAny};
-use scylla::batch::{Batch, BatchStatement, BatchType};
+use scylla::{
+    batch::{Batch, BatchStatement, BatchType},
+    frame::value::LegacySerializedValues,
+};
 
 use crate::{
     exceptions::rust_err::ScyllaPyResult, inputs::BatchQueryInput, queries::ScyllaPyRequestParams,
     utils::parse_python_query_params,
 };
-use scylla::frame::value::SerializedValues;
 
 #[pyclass(name = "BatchType")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -27,7 +29,7 @@ pub struct ScyllaPyBatch {
 pub struct ScyllaPyInlineBatch {
     inner: Batch,
     request_params: ScyllaPyRequestParams,
-    values: Vec<SerializedValues>,
+    values: Vec<LegacySerializedValues>,
 }
 
 impl From<ScyllaPyBatch> for Batch {
@@ -38,7 +40,7 @@ impl From<ScyllaPyBatch> for Batch {
     }
 }
 
-impl From<ScyllaPyInlineBatch> for (Batch, Vec<SerializedValues>) {
+impl From<ScyllaPyInlineBatch> for (Batch, Vec<LegacySerializedValues>) {
     fn from(mut value: ScyllaPyInlineBatch) -> Self {
         value.request_params.apply_to_batch(&mut value.inner);
         (value.inner, value.values)
@@ -74,7 +76,7 @@ impl ScyllaPyInlineBatch {
     pub fn add_query_inner(
         &mut self,
         query: impl Into<BatchStatement>,
-        values: impl Into<SerializedValues>,
+        values: impl Into<LegacySerializedValues>,
     ) {
         self.inner.append_statement(query);
         self.values.push(values.into());
@@ -123,7 +125,7 @@ impl ScyllaPyInlineBatch {
             self.values
                 .push(parse_python_query_params(Some(passed_params), false, None)?);
         } else {
-            self.values.push(SerializedValues::new());
+            self.values.push(LegacySerializedValues::new());
         }
         Ok(())
     }

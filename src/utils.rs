@@ -1,18 +1,16 @@
 use std::{collections::HashMap, future::Future, hash::BuildHasherDefault, str::FromStr};
 
-use chrono::Duration;
 use pyo3::{
     types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyModule, PySet, PyString, PyTuple},
     IntoPy, Py, PyAny, PyObject, PyResult, Python, ToPyObject,
 };
 use scylla::{
     frame::{
-        response::result::{ColumnType, CqlValue},
-        value::{SerializedValues, Value},
+        response::result::{ColumnSpec, ColumnType, CqlValue},
+        value::{LegacySerializedValues, Value},
     },
     BufMut,
 };
-use scylla_cql::frame::response::result::ColumnSpec;
 
 use std::net::IpAddr;
 
@@ -20,6 +18,9 @@ use crate::{
     exceptions::rust_err::{ScyllaPyError, ScyllaPyResult},
     extra_types::{BigInt, Counter, Double, ScyllaPyUnset, SmallInt, TinyInt},
 };
+
+const DATE_FORMAT: &[::time::format_description::FormatItem<'static>] =
+    ::time::macros::format_description!(version = 2, "[year]-[month]-[day]");
 
 /// Add submodule.
 ///
@@ -94,8 +95,8 @@ pub enum ScyllaPyCQLDTO {
     Float(eq_float::F32),
     Bytes(Vec<u8>),
     Date(chrono::NaiveDate),
-    Time(chrono::Duration),
-    Timestamp(chrono::Duration),
+    Time(chrono::NaiveTime),
+    Timestamp(chrono::DateTime<chrono::Utc>),
     Uuid(uuid::Uuid),
     Inet(IpAddr),
     List(Vec<ScyllaPyCQLDTO>),
@@ -121,14 +122,14 @@ impl Value for ScyllaPyCQLDTO {
             ScyllaPyCQLDTO::Counter(counter) => counter.serialize(buf),
             ScyllaPyCQLDTO::TinyInt(tinyint) => tinyint.serialize(buf),
             ScyllaPyCQLDTO::Date(date) => date.serialize(buf),
-            ScyllaPyCQLDTO::Time(time) => scylla::frame::value::Time(*time).serialize(buf),
+            ScyllaPyCQLDTO::Time(time) => time.serialize(buf),
             ScyllaPyCQLDTO::Map(map) => map
                 .iter()
                 .cloned()
                 .collect::<HashMap<_, _, BuildHasherDefault<rustc_hash::FxHasher>>>()
                 .serialize(buf),
             ScyllaPyCQLDTO::Timestamp(timestamp) => {
-                scylla::frame::value::Timestamp(*timestamp).serialize(buf)
+                scylla::frame::value::CqlTimestamp::from(*timestamp).serialize(buf)
             }
             ScyllaPyCQLDTO::Null => Option::<i16>::None.serialize(buf),
             ScyllaPyCQLDTO::Udt(udt) => {
@@ -243,20 +244,19 @@ pub fn py_to_value(
             item.call_method0("isoformat")?.extract::<&str>()?,
         )?))
     } else if item.get_type().name()? == "time" {
-        Ok(ScyllaPyCQLDTO::Time(
-            chrono::NaiveTime::from_str(item.call_method0("isoformat")?.extract::<&str>()?)?
-                .signed_duration_since(
-                    chrono::NaiveTime::from_num_seconds_from_midnight_opt(0, 0).ok_or(
-                        ScyllaPyError::BindingError(format!(
-                            "Cannot calculate offset from midnight for value {item}"
-                        )),
-                    )?,
-                ),
-        ))
+        Ok(ScyllaPyCQLDTO::Time(chrono::NaiveTime::from_str(
+            item.call_method0("isoformat")?.extract::<&str>()?,
+        )?))
     } else if item.get_type().name()? == "datetime" {
         let milliseconds = item.call_method0("timestamp")?.extract::<f64>()? * 1000f64;
         #[allow(clippy::cast_possible_truncation)]
-        let timestamp = Duration::milliseconds(milliseconds.trunc() as i64);
+        let seconds = milliseconds as i64 / 1_000;
+        #[allow(clippy::cast_possible_truncation)]
+        #[allow(clippy::cast_sign_loss)]
+        let nsecs = (milliseconds as i64 % 1_000) as u32 * 1_000_000;
+        let timestamp = chrono::DateTime::<chrono::Utc>::from_timestamp(seconds, nsecs).ok_or(
+            ScyllaPyError::BindingError("Cannot convert datetime to timestamp.".into()),
+        )?;
         Ok(ScyllaPyCQLDTO::Timestamp(timestamp))
     } else if item.is_instance_of::<PyList>()
         || item.is_instance_of::<PyTuple>()
@@ -418,6 +418,7 @@ pub fn cql_to_py<'a>(
                     col_name.into(),
                     "Timeuuid",
                 ))?
+                .as_ref()
                 .as_simple()
                 .to_string();
             Ok(py.import("uuid")?.getattr("UUID")?.call1((uuid_str,))?)
@@ -431,37 +432,61 @@ pub fn cql_to_py<'a>(
             // same driver. Will fix it on demand.
             let duration =
                 unwrapped_value
-                    .as_duration()
+                    .as_cql_duration()
                     .ok_or(ScyllaPyError::ValueDowncastError(
                         col_name.into(),
                         "Duration",
                     ))?;
             let kwargs = PyDict::new(py);
-            kwargs.set_item("microseconds", duration.num_microseconds())?;
+            kwargs.set_item("months", duration.months)?;
+            kwargs.set_item("days", duration.days)?;
+            kwargs.set_item("microseconds", duration.nanoseconds / 1_000)?;
             Ok(py
-                .import("datetime")?
-                .getattr("timedelta")?
+                .import("dateutil")?
+                .getattr("relativedelta")?
+                .getattr("relativedelta")?
                 .call((), Some(kwargs))?)
         }
         ColumnType::Timestamp => {
             // Timestamp - num of milliseconds since unix epoch.
             let timestamp =
                 unwrapped_value
-                    .as_duration()
+                    .as_cql_timestamp()
                     .ok_or(ScyllaPyError::ValueDowncastError(
                         col_name.into(),
                         "Timestamp",
                     ))?;
+            let milliseconds = timestamp.0;
+            if milliseconds < 0 {
+                return Err(ScyllaPyError::ValueDowncastError(
+                    col_name.into(),
+                    "Timestamp cannot be less than 0",
+                ));
+            }
+            let seconds =
+                milliseconds
+                    .checked_div(1_000)
+                    .ok_or(ScyllaPyError::ValueDowncastError(
+                        col_name.into(),
+                        "Cannot get seconds out of milliseconds.",
+                    ))?;
+            #[allow(clippy::cast_possible_truncation)]
+            #[allow(clippy::cast_sign_loss)]
+            let nsecs = (milliseconds % 1_000).checked_mul(1_000_000).ok_or(
+                ScyllaPyError::ValueDowncastError(col_name.into(), "Cannot construct nanoseconds"),
+            )? as u32;
+
+            let timestamp = chrono::DateTime::<chrono::Utc>::from_timestamp(seconds, nsecs).ok_or(
+                ScyllaPyError::ValueDowncastError(
+                    col_name.into(),
+                    "Cannot construct datetime based on timestamp",
+                ),
+            )?;
             #[allow(clippy::cast_precision_loss)]
-            let seconds = timestamp.num_seconds() as f64;
-            #[allow(clippy::cast_precision_loss)]
-            let micros = (timestamp - Duration::seconds(timestamp.num_seconds())).num_milliseconds()
-                as f64
-                / 1_000f64; // Converting microseconds to seconds to construct timestamp
-            Ok(py
-                .import("datetime")?
-                .getattr("datetime")?
-                .call_method1("fromtimestamp", (seconds + micros,))?)
+            Ok(py.import("datetime")?.getattr("datetime")?.call_method1(
+                "fromtimestamp",
+                (timestamp.timestamp_millis() as f64 / 1000f64,),
+            )?)
         }
         ColumnType::Inet => Ok(unwrapped_value
             .as_inet()
@@ -472,7 +497,8 @@ pub fn cql_to_py<'a>(
             let formatted_date = unwrapped_value
                 .as_date()
                 .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Date"))?
-                .format("%Y-%m-%d")
+                .format(DATE_FORMAT)
+                .map_err(|_| ScyllaPyError::ValueDowncastError(col_name.into(), "Date"))?
                 .to_string();
             Ok(py
                 .import("datetime")?
@@ -500,19 +526,18 @@ pub fn cql_to_py<'a>(
             .to_object(py)
             .into_ref(py)),
         ColumnType::Time => {
-            let duration = unwrapped_value
-                .as_duration()
+            let time = unwrapped_value
+                .as_time()
                 .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Time"))?;
-            let time = chrono::NaiveTime::from_num_seconds_from_midnight_opt(0, 0).ok_or(
-                ScyllaPyError::ValueDowncastError(
-                    col_name.into(),
-                    "Time, because it's value is too big",
-                ),
-            )? + duration;
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("hour", time.hour())?;
+            kwargs.set_item("minute", time.minute())?;
+            kwargs.set_item("second", time.second())?;
+            kwargs.set_item("microsecond", time.microsecond())?;
             Ok(py
                 .import("datetime")?
                 .getattr("time")?
-                .call_method1("fromisoformat", (time.format("%H:%M:%S%.6f").to_string(),))?)
+                .call((), Some(kwargs))?)
         }
         ColumnType::UserDefinedType {
             type_name,
@@ -557,13 +582,13 @@ pub fn cql_to_py<'a>(
     }
 }
 
-/// Parse python type to `SerializedValues`.
+/// Parse python type to `LegacySerializedValues`.
 ///
 /// Serialized values are used for
 /// parameter binding. We parse python types
 /// into our own types that are capable
 /// of being bound to query and add parsed
-/// results to `SerializedValues`.
+/// results to `LegacySerializedValues`.
 ///
 /// # Errors
 ///
@@ -573,8 +598,8 @@ pub fn parse_python_query_params(
     params: Option<&PyAny>,
     allow_dicts: bool,
     col_spec: Option<&[ColumnSpec]>,
-) -> ScyllaPyResult<SerializedValues> {
-    let mut values = SerializedValues::new();
+) -> ScyllaPyResult<LegacySerializedValues> {
+    let mut values = LegacySerializedValues::new();
 
     let Some(params) = params else {
         return Ok(values);

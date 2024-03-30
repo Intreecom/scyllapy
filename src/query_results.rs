@@ -130,7 +130,7 @@ impl ScyllaPyQueryResult {
     /// This function grabs rows from all function and
     /// tries to get the first column of any row.
     ///
-    /// # Erros
+    /// # Errors
     ///
     /// May result in an error if:
     /// * Query doesn't have a returns;
@@ -158,7 +158,7 @@ impl ScyllaPyQueryResult {
     /// This function grabs first row and
     /// tries to get the first column of a result.
     ///
-    /// # Erros
+    /// # Errors
     ///
     /// May result in an error if:
     /// * Query doesn't have a returns;
@@ -238,7 +238,15 @@ impl ScyllaPyIterableQueryResult {
 
     /// Actual async iteration.
     ///
-    /// Here we define how to
+    /// Here we define how to iterate over rows.
+    ///
+    /// # Errors
+    ///
+    /// May return an error if:
+    /// * No more rows to iterate;
+    /// * No columns in a row.
+    /// * Cannot convert column to python object.
+    /// * Cannot acquire GIL.
     pub fn __anext__(&self, py: Python<'_>) -> ScyllaPyResult<Option<PyObject>> {
         let streamer = self.inner.clone();
         let map_function = self.mapper.clone();

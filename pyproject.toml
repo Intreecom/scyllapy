@@ -16,7 +16,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "Topic :: Database :: Front-Ends",
 ]
-
+dependencies = ["python-dateutil"]
 
 [tool.maturin]
 python-source = "python"
