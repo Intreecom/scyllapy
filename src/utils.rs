@@ -92,6 +92,7 @@ pub enum ScyllaPyCQLDTO {
     Counter(i64),
     Bool(bool),
     Double(eq_float::F64),
+    Decimal(bigdecimal_04::BigDecimal),
     Float(eq_float::F32),
     Bytes(Vec<u8>),
     Date(chrono::NaiveDate),
@@ -131,11 +132,12 @@ impl Value for ScyllaPyCQLDTO {
             ScyllaPyCQLDTO::Timestamp(timestamp) => {
                 scylla::frame::value::CqlTimestamp::from(*timestamp).serialize(buf)
             }
-            ScyllaPyCQLDTO::Null => Option::<i16>::None.serialize(buf),
+            ScyllaPyCQLDTO::Null => Option::<bool>::None.serialize(buf),
             ScyllaPyCQLDTO::Udt(udt) => {
                 buf.extend(udt);
                 Ok(())
             }
+            ScyllaPyCQLDTO::Decimal(decimal) => decimal.serialize(buf),
             ScyllaPyCQLDTO::Unset => scylla::frame::value::Unset.serialize(buf),
         }
     }
@@ -247,6 +249,12 @@ pub fn py_to_value(
         Ok(ScyllaPyCQLDTO::Time(chrono::NaiveTime::from_str(
             item.call_method0("isoformat")?.extract::<&str>()?,
         )?))
+    } else if item.get_type().name()? == "Decimal" {
+        Ok(ScyllaPyCQLDTO::Decimal(
+            bigdecimal_04::BigDecimal::from_str(item.str()?.to_str()?).map_err(|err| {
+                ScyllaPyError::BindingError(format!("Cannot parse decimal {err}"))
+            })?,
+        ))
     } else if item.get_type().name()? == "datetime" {
         let milliseconds = item.call_method0("timestamp")?.extract::<f64>()? * 1000f64;
         #[allow(clippy::cast_possible_truncation)]
@@ -576,9 +584,27 @@ pub fn cql_to_py<'a>(
             }
             Ok(res_map)
         }
-        ColumnType::Custom(_) | ColumnType::Varint | ColumnType::Decimal => Err(
-            ScyllaPyError::ValueDowncastError(col_name.into(), "Unknown"),
-        ),
+        ColumnType::Decimal => {
+            // Because the `as_decimal` method is not implemented for `CqlValue`,
+            // will make a PR.
+            let decimal: bigdecimal_04::BigDecimal = match unwrapped_value {
+                CqlValue::Decimal(inner) => inner.clone().into(),
+                _ => {
+                    return Err(ScyllaPyError::ValueDowncastError(
+                        col_name.into(),
+                        "Decimal",
+                    ))
+                }
+            };
+            Ok(py
+                .import("decimal")?
+                .getattr("Decimal")?
+                .call1((decimal.to_scientific_notation(),))?)
+        }
+        ColumnType::Custom(_) | ColumnType::Varint => Err(ScyllaPyError::ValueDowncastError(
+            col_name.into(),
+            "Unknown",
+        )),
     }
 }
 
