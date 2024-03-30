@@ -2,6 +2,7 @@ import datetime
 import ipaddress
 import random
 import uuid
+from decimal import Decimal
 from typing import Any, Callable
 
 import pytest
@@ -30,6 +31,8 @@ from scyllapy import Scylla
         ("UUID", uuid.uuid5(uuid.uuid4(), "name")),
         ("INET", ipaddress.ip_address("192.168.1.1")),
         ("INET", ipaddress.ip_address("2001:db8::8a2e:370:7334")),
+        ("DECIMAL", Decimal("1.1")),
+        ("DECIMAL", Decimal("1.112e10")),
     ],
 )
 async def test_bindings(
