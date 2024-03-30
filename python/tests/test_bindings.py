@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Any, Callable
 
 import pytest
+from dateutil.relativedelta import relativedelta
 from tests.utils import random_string
 
 from scyllapy import Scylla
@@ -33,6 +34,8 @@ from scyllapy import Scylla
         ("INET", ipaddress.ip_address("2001:db8::8a2e:370:7334")),
         ("DECIMAL", Decimal("1.1")),
         ("DECIMAL", Decimal("1.112e10")),
+        ("DURATION", relativedelta(months=1, days=2, microseconds=10)),
+        ("VARINT", 1000),
     ],
 )
 async def test_bindings(
@@ -42,15 +45,14 @@ async def test_bindings(
 ) -> None:
     table_name = random_string(4)
     await scylla.execute(
-        f"CREATE TABLE {table_name} (id {type_name}, PRIMARY KEY (id))",
+        f"CREATE TABLE {table_name} (id INT, value {type_name}, PRIMARY KEY (id))",
     )
-    insert_query = f"INSERT INTO {table_name}(id) VALUES (?)"
-    await scylla.execute(insert_query, [test_val])
+    insert_query = f"INSERT INTO {table_name}(id, value) VALUES (?, ?)"
+    await scylla.execute(insert_query, [1, test_val])
 
     result = await scylla.execute(f"SELECT * FROM {table_name}")
     rows = result.all()
-    assert len(rows) == 1
-    assert rows[0] == {"id": test_val}
+    assert rows == [{"id": 1, "value": test_val}]
 
 
 @pytest.mark.anyio
