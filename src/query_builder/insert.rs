@@ -50,7 +50,7 @@ impl Insert {
         } else {
             ""
         };
-        let params = vec![
+        let params = [
             self.timestamp_
                 .map(|timestamp| format!("TIMESTAMP {timestamp}")),
             self.ttl_.map(|ttl| format!("TTL {ttl}")),

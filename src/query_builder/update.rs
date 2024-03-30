@@ -57,7 +57,7 @@ impl Update {
                 "Update should contain at least one where clause",
             ));
         }
-        let params = vec![
+        let params = [
             self.timestamp_
                 .map(|timestamp| format!("TIMESTAMP {timestamp}")),
             self.ttl_.map(|ttl| format!("TTL {ttl}")),

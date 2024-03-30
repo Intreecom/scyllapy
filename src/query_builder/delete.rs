@@ -34,7 +34,7 @@ impl Delete {
             .columns
             .as_ref()
             .map_or(String::new(), |cols| cols.join(", "));
-        let params = vec![
+        let params = [
             self.timestamp_
                 .map(|timestamp| format!("TIMESTAMP {timestamp}")),
             self.timeout_.as_ref().map(|timeout| match timeout {
