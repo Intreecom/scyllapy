@@ -1,5 +1,5 @@
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, Callable
 
 import pytest
 from tests.utils import random_string
@@ -147,3 +147,28 @@ async def test_autocast_positional(scylla: Scylla, typ: str, val: Any) -> None:
     await scylla.execute(f"CREATE TABLE {table_name}(id INT PRIMARY KEY, val {typ})")
     prepared = await scylla.prepare(f"INSERT INTO {table_name}(id, val) VALUES (?, ?)")
     await scylla.execute(prepared, [1, val])
+
+
+@pytest.mark.parametrize(
+    ["cast_func", "val"],
+    [
+        (extra_types.BigInt, 1000000),
+        (extra_types.SmallInt, 10),
+        (extra_types.TinyInt, 1),
+        (int, 1),
+    ],
+)
+@pytest.mark.anyio
+async def test_varint(
+    scylla: Scylla,
+    cast_func: Callable[[Any], Any],
+    val: Any,
+) -> None:
+    table_name = random_string(4)
+    await scylla.execute(f"CREATE TABLE {table_name}(id INT PRIMARY KEY, val VARINT)")
+    await scylla.execute(
+        f"INSERT INTO {table_name}(id, val) VALUES (?, ?)",
+        (1, cast_func(val)),
+    )
+    res = await scylla.execute(f"SELECT * FROM {table_name}")
+    assert res.all() == [{"id": 1, "val": val}]

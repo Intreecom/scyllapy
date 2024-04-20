@@ -1,5 +1,5 @@
 use pyo3::{pyclass, pymethods, types::PyDict, PyAny, PyRefMut, Python};
-use scylla::query::Query;
+use scylla::{frame::value::LegacySerializedValues, query::Query};
 
 use super::utils::{pretty_build, IfCluase, Timeout};
 use crate::{
@@ -9,7 +9,6 @@ use crate::{
     scylla_cls::Scylla,
     utils::{py_to_value, ScyllaPyCQLDTO},
 };
-use scylla::frame::value::SerializedValues;
 
 #[pyclass]
 #[derive(Clone, Debug, Default)]
@@ -35,7 +34,7 @@ impl Delete {
             .columns
             .as_ref()
             .map_or(String::new(), |cols| cols.join(", "));
-        let params = vec![
+        let params = [
             self.timestamp_
                 .map(|timestamp| format!("TIMESTAMP {timestamp}")),
             self.timeout_.as_ref().map(|timeout| match timeout {
@@ -208,7 +207,7 @@ impl Delete {
     ///
     /// Adds current query to batch.
     ///
-    /// # Error
+    /// # Errors
     ///
     /// May result into error if query cannot be build.
     /// Or values cannot be passed to batch.
@@ -221,7 +220,7 @@ impl Delete {
         } else {
             self.values_.clone()
         };
-        let mut serialized = SerializedValues::new();
+        let mut serialized = LegacySerializedValues::new();
         for val in values {
             serialized.add_value(&val)?;
         }

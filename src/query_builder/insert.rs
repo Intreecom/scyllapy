@@ -1,5 +1,5 @@
 use pyo3::{pyclass, pymethods, types::PyDict, PyAny, PyRefMut, Python};
-use scylla::query::Query;
+use scylla::{frame::value::LegacySerializedValues, query::Query};
 
 use crate::{
     batches::ScyllaPyInlineBatch,
@@ -8,7 +8,6 @@ use crate::{
     scylla_cls::Scylla,
     utils::{py_to_value, ScyllaPyCQLDTO},
 };
-use scylla::frame::value::SerializedValues;
 
 use super::utils::{pretty_build, Timeout};
 
@@ -51,7 +50,7 @@ impl Insert {
         } else {
             ""
         };
-        let params = vec![
+        let params = [
             self.timestamp_
                 .map(|timestamp| format!("TIMESTAMP {timestamp}")),
             self.ttl_.map(|ttl| format!("TTL {ttl}")),
@@ -172,7 +171,7 @@ impl Insert {
     ///
     /// Adds current query to batch.
     ///
-    /// # Error
+    /// # Errors
     ///
     /// May result into error if query cannot be build.
     /// Or values cannot be passed to batch.
@@ -180,7 +179,7 @@ impl Insert {
         let mut query = Query::new(self.build_query()?);
         self.request_params_.apply_to_query(&mut query);
 
-        let mut serialized = SerializedValues::new();
+        let mut serialized = LegacySerializedValues::new();
         for val in self.values_.clone() {
             serialized.add_value(&val)?;
         }

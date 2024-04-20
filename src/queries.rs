@@ -66,31 +66,31 @@ impl ScyllaPyRequestParams {
         };
         Ok(Self {
             consistency: params
-                .get_item("consistency")
+                .get_item("consistency")?
                 .map(pyo3::FromPyObject::extract)
                 .transpose()?,
             serial_consistency: params
-                .get_item("serial_consistency")
+                .get_item("serial_consistency")?
                 .map(pyo3::FromPyObject::extract)
                 .transpose()?,
             request_timeout: params
-                .get_item("request_timeout")
+                .get_item("request_timeout")?
                 .map(pyo3::FromPyObject::extract)
                 .transpose()?,
             timestamp: params
-                .get_item("timestamp")
+                .get_item("timestamp")?
                 .map(pyo3::FromPyObject::extract)
                 .transpose()?,
             is_idempotent: params
-                .get_item("is_idempotent")
+                .get_item("is_idempotent")?
                 .map(pyo3::FromPyObject::extract)
                 .transpose()?,
             tracing: params
-                .get_item("tracing")
+                .get_item("tracing")?
                 .map(pyo3::FromPyObject::extract)
                 .transpose()?,
             profile: params
-                .get_item("profile")
+                .get_item("profile")?
                 .map(pyo3::FromPyObject::extract)
                 .transpose()?,
         })
