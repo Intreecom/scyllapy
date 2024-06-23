@@ -515,10 +515,23 @@ pub fn cql_to_py<'a>(
                     "Cannot construct datetime based on timestamp",
                 ),
             )?;
+
+            // Create timezone object.
+            let py_datetime = py.import("datetime")?;
+            
+            let timezone_offset_kwargs = PyDict::new(py);
+            timezone_offset_kwargs.set_item("seconds", chrono::Local::now().offset().local_minus_utc())?;
+            let timezone_object = py_datetime.call_method1("timezone", (
+                py_datetime.call_method("timedelta", (), Some(&timezone_offset_kwargs))?,
+            ))?;
+
             #[allow(clippy::cast_precision_loss)]
-            Ok(py.import("datetime")?.getattr("datetime")?.call_method1(
+            Ok(py_datetime.getattr("datetime")?.call_method1(
                 "fromtimestamp",
-                (timestamp.timestamp_millis() as f64 / 1000f64,),
+                (
+                    timestamp.timestamp_millis() as f64 / 1000f64,
+                    timezone_object
+                ),
             )?)
         }
         ColumnType::Inet => Ok(unwrapped_value
