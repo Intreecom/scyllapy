@@ -1,9 +1,9 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - '*'
+  release:
+    types:
+      - released
 
 permissions:
   contents: write
@@ -25,6 +25,9 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: '3.11'
+      - name: Bumping version
+        run: |
+          python ./scripts/version_bumper.py --target Cargo.toml "${{ github.ref_name }}"
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -69,6 +72,9 @@ jobs:
         with:
           python-version: '3.10'
           architecture: ${{ matrix.target }}
+      - name: Bumping version
+        run: |
+          python ./scripts/version_bumper.py --target Cargo.toml "${{ github.ref_name }}"
       - name: Install OpenSSL
         run: vcpkg install openssl:x64-windows-static-md
       - name: Build wheels
@@ -100,6 +106,9 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: '3.10'
+      - name: Bumping version
+        run: |
+          python ./scripts/version_bumper.py --target Cargo.toml "${{ github.ref_name }}"
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -123,6 +132,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Bumping version
+        run: |
+          python ./scripts/version_bumper.py --target Cargo.toml "${{ github.ref_name }}"
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
@@ -154,6 +169,9 @@ jobs:
         with:
           python-version: '3.11'
           architecture: x64
+      - name: Bumping version
+        run: |
+          python ./scripts/version_bumper.py --target Cargo.toml "${{ github.ref_name }}"
       - name: Instal OpenSSL
         run: sudo apt-get update && sudo apt-get install libssl-dev openssl
       - name: Build wheels
