@@ -369,7 +369,7 @@ pub fn cql_to_py<'a>(
             .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Double"))
             .map(|val| val.to_object(py).into_ref(py)),
         ColumnType::Float => unwrapped_value
-            .as_double()
+            .as_float()
             .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Float"))
             .map(|val| val.to_object(py).into_ref(py)),
         ColumnType::Int => unwrapped_value
