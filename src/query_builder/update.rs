@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use pyo3::{pyclass, pymethods, types::PyDict, PyAny, PyRefMut, Python};
 use scylla::{frame::value::LegacySerializedValues, query::Query};
 
@@ -17,12 +19,12 @@ enum UpdateAssignment {
     Dec(String, String),
 }
 
-impl ToString for UpdateAssignment {
-    fn to_string(&self) -> String {
+impl Display for UpdateAssignment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            UpdateAssignment::Simple(name) => format!("{name} = ?"),
-            UpdateAssignment::Inc(left, right) => format!("{left} = {right} + ?"),
-            UpdateAssignment::Dec(left, right) => format!("{left} = {right} - ?"),
+            UpdateAssignment::Simple(name) => f.write_fmt(format_args!("{name} = ?")),
+            UpdateAssignment::Inc(left, right) => f.write_fmt(format_args!("{left} = {right} + ?")),
+            UpdateAssignment::Dec(left, right) => f.write_fmt(format_args!("{left} = {right} - ?")),
         }
     }
 }
