@@ -109,6 +109,23 @@ async def test_named_parameters(scylla: Scylla) -> None:
 
 
 @pytest.mark.anyio
+async def test_floats(scylla: Scylla) -> None:
+    table_name = random_string(4)
+    my_float = 1.234
+    await scylla.execute(
+        f"CREATE TABLE {table_name} (id INT, fl FLOAT, PRIMARY KEY (id))",
+    )
+    insert_query = f"INSERT INTO {table_name}(id, fl) VALUES (?, ?)"
+
+    await scylla.execute(insert_query, [1, my_float])
+
+    res = await scylla.execute(f"SELECT fl FROM {table_name}")
+    scalar = res.scalar()
+    assert scalar
+    assert abs(scalar - my_float) < 0.001
+
+
+@pytest.mark.anyio
 async def test_timestamps(scylla: Scylla) -> None:
     table_name = random_string(4)
     now = datetime.datetime.now()
