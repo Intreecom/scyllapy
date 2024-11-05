@@ -1,5 +1,6 @@
 from importlib.metadata import version
 
+from . import extra_types
 from ._internal import (
     Batch,
     BatchType,
@@ -11,6 +12,7 @@ from ._internal import (
     QueryResult,
     Scylla,
     SerialConsistency,
+    SSLVerifyMode,
 )
 
 __version__ = version("scyllapy")
@@ -25,6 +27,7 @@ __all__ = [
     "Batch",
     "BatchType",
     "QueryResult",
+    "SSLVerifyMode",
     "extra_types",
     "InlineBatch",
     "ExecutionProfile",

@@ -14,6 +14,18 @@ from scyllapy._internal.load_balancing import LoadBalancingPolicy
 _T = TypeVar("_T")
 _T2 = TypeVar("_T2")
 
+class SSLVerifyMode:
+    """
+    SSL Verify modes.
+
+    Used for SSL/TLS connection verification.
+    Read mode: https://docs.rs/openssl/0.10.68/openssl/ssl/struct.SslVerifyMode.html
+    """
+
+    NONE: SSLVerifyMode
+    PEER: SSLVerifyMode
+    FAIL_IF_NO_PEER_CERT: SSLVerifyMode
+
 class Scylla:
     """
     Scylla class.
@@ -32,6 +44,9 @@ class Scylla:
         password: str | None = None,
         keyspace: str | None = None,
         ssl_cert: str | None = None,
+        ssl_key: str | None = None,
+        ssl_ca_file: str | None = None,
+        ssl_verify_mode: SSLVerifyMode | None = None,
         conn_timeout: int | None = None,
         write_coalescing: bool | None = None,
         pool_size_per_host: int | None = None,
@@ -50,8 +65,13 @@ class Scylla:
             ["192.168.1.1:9042", "my_keyspace.node:9042"]
         :param username: Plain text auth username.
         :param password: Plain text auth password.
-        :param ssl_cert: Certficiate string to use
-            for connection. AWS requires it.
+        :param ssl_cert: Certficiate string to use for connection.
+            Should be PEM encoded x509 certificate string.
+        :param ssl_key: Key string to use for connection.
+            Should be RSA private key PEM encoded string.
+        :param ssl_ca_file: CA file to use for connection. This parameter
+            should be a path to the CA file (which is PEM encoded CA).
+        :param ssl_verify_mode: tells server on how to validate client's certificate.
         :param conn_timeout: Timeout in seconds.
         :param write_coalescing:
             If true, the driver will inject a small delay before flushing data

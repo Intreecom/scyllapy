@@ -9,11 +9,36 @@ use crate::{
     utils::{parse_python_query_params, scyllapy_future},
 };
 use openssl::{
+    pkey::PKey,
+    rsa::Rsa,
     ssl::{SslContextBuilder, SslMethod, SslVerifyMode},
     x509::X509,
 };
 use pyo3::{pyclass, pymethods, PyAny, Python};
 use scylla::{frame::value::ValueList, prepared_statement::PreparedStatement, query::Query};
+
+/// SSL verification mode.
+#[pyclass(name = "SSLVerifyMode")]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[allow(non_camel_case_types)]
+pub enum ScyllaPySSLVerifyMode {
+    /// No verification.
+    NONE,
+    // Verify peer.
+    PEER,
+    // Fail if no peer certificate.
+    FAIL_IF_NO_PEER_CERT,
+}
+
+impl From<ScyllaPySSLVerifyMode> for SslVerifyMode {
+    fn from(value: ScyllaPySSLVerifyMode) -> Self {
+        match value {
+            ScyllaPySSLVerifyMode::NONE => Self::NONE,
+            ScyllaPySSLVerifyMode::PEER => Self::PEER,
+            ScyllaPySSLVerifyMode::FAIL_IF_NO_PEER_CERT => Self::FAIL_IF_NO_PEER_CERT,
+        }
+    }
+}
 
 #[pyclass(frozen, weakref)]
 #[derive(Clone)]
@@ -23,6 +48,9 @@ pub struct Scylla {
     password: Option<String>,
     keyspace: Option<String>,
     ssl_cert: Option<String>,
+    ssl_key: Option<String>,
+    ssl_ca_file: Option<String>,
+    ssl_verify_mode: Option<ScyllaPySSLVerifyMode>,
     connection_timeout: Option<u64>,
     write_coalescing: Option<bool>,
     disallow_shard_aware_port: Option<bool>,
@@ -110,6 +138,9 @@ impl Scylla {
         password = None,
         keyspace = None,
         ssl_cert = None,
+        ssl_key  = None,
+        ssl_ca_file = None,
+        ssl_verify_mode = None,
         connection_timeout = None,
         write_coalescing = None,
         pool_size_per_host = None,
@@ -128,6 +159,9 @@ impl Scylla {
         password: Option<String>,
         keyspace: Option<String>,
         ssl_cert: Option<String>,
+        ssl_key: Option<String>,
+        ssl_ca_file: Option<String>,
+        ssl_verify_mode: Option<ScyllaPySSLVerifyMode>,
         connection_timeout: Option<u64>,
         write_coalescing: Option<bool>,
         pool_size_per_host: Option<NonZeroUsize>,
@@ -144,6 +178,9 @@ impl Scylla {
             username,
             password,
             ssl_cert,
+            ssl_key,
+            ssl_ca_file,
+            ssl_verify_mode,
             keyspace,
             connection_timeout,
             write_coalescing,
@@ -177,8 +214,24 @@ impl Scylla {
         if let Some(cert_data) = self.ssl_cert.clone() {
             let mut ssl_context_builder = SslContextBuilder::new(SslMethod::tls())?;
             let pem = X509::from_pem(cert_data.as_bytes())?;
+            // If we have private key, we need to add it to context.
+            if let Some(key) = &self.ssl_key {
+                let rsa = Rsa::private_key_from_pem(key.as_bytes())?;
+                let pkey = PKey::from_rsa(rsa)?;
+                ssl_context_builder.set_private_key(&pkey)?;
+            }
+            // If we have CA file, we need to add it to context.
+            if let Some(ca_file) = &self.ssl_ca_file {
+                ssl_context_builder.set_ca_file(ca_file)?;
+            }
+            // Set verification mode.
+            // If no mode was passed, we use NONE.
+            let verify_mode = self
+                .ssl_verify_mode
+                .map_or(SslVerifyMode::NONE, SslVerifyMode::from);
+
             ssl_context_builder.set_certificate(&pem)?;
-            ssl_context_builder.set_verify(SslVerifyMode::NONE);
+            ssl_context_builder.set_verify(verify_mode);
             ssl_context = Some(ssl_context_builder.build());
         }
         let keyspace = self.keyspace.clone();

@@ -481,3 +481,4 @@ To make built `Select` query return paginated iterator, add paged parameter in e
     async for row in rows:
         print(row['id'])
 ```
+
