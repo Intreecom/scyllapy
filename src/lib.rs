@@ -21,6 +21,7 @@ use crate::utils::add_submodule;
 fn _internal(py: Python<'_>, pymod: &PyModule) -> PyResult<()> {
     pyo3_log::init();
     pymod.add_class::<scylla_cls::Scylla>()?;
+    pymod.add_class::<scylla_cls::ScyllaPySSLVerifyMode>()?;
     pymod.add_class::<consistencies::ScyllaPyConsistency>()?;
     pymod.add_class::<consistencies::ScyllaPySerialConsistency>()?;
     pymod.add_class::<queries::ScyllaPyQuery>()?;
