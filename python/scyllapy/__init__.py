@@ -18,17 +18,17 @@ from ._internal import (
 __version__ = version("scyllapy")
 
 __all__ = [
-    "__version__",
-    "Scylla",
-    "Consistency",
-    "Query",
-    "SerialConsistency",
-    "PreparedQuery",
     "Batch",
     "BatchType",
+    "Consistency",
+    "ExecutionProfile",
+    "InlineBatch",
+    "PreparedQuery",
+    "Query",
     "QueryResult",
     "SSLVerifyMode",
+    "Scylla",
+    "SerialConsistency",
+    "__version__",
     "extra_types",
-    "InlineBatch",
-    "ExecutionProfile",
 ]

@@ -14,7 +14,7 @@ macro_rules! simple_wrapper {
 
         impl $name {
             #[must_use]
-            pub fn get_value(&self) -> $ttype {
+            pub const fn get_value(&self) -> $ttype {
                 self.inner
             }
         }
@@ -23,7 +23,7 @@ macro_rules! simple_wrapper {
         impl $name {
             #[new]
             #[must_use]
-            pub fn py_new(val: $ttype) -> Self {
+            pub const fn py_new(val: $ttype) -> Self {
                 Self { inner: val }
             }
 
@@ -49,7 +49,7 @@ pub struct ScyllaPyUnset {}
 impl ScyllaPyUnset {
     #[new]
     #[must_use]
-    pub fn py_new() -> Self {
+    pub const fn py_new() -> Self {
         Self {}
     }
 }

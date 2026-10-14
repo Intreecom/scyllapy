@@ -23,8 +23,8 @@ impl IfCluase {
     #[must_use]
     pub fn extend_values(&self, query_values: Vec<ScyllaPyCQLDTO>) -> Vec<ScyllaPyCQLDTO> {
         match self {
-            IfCluase::Exists => query_values,
-            IfCluase::Condition { clauses: _, values } => {
+            Self::Exists => query_values,
+            Self::Condition { clauses: _, values } => {
                 query_values.iter().chain(values.iter()).cloned().collect()
             }
         }

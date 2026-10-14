@@ -53,15 +53,15 @@ impl Delete {
             format!("USING {}", prepared_params.join(" AND "))
         };
         let where_clause = format!("WHERE {}", self.where_clauses_.join(" AND "));
-        let if_conditions = self
-            .if_clause_
-            .as_ref()
-            .map_or(String::default(), |cond| match cond {
-                IfCluase::Exists => String::from("IF EXISTS"),
-                IfCluase::Condition { clauses, values: _ } => {
-                    format!("IF {}", clauses.join(" AND "))
-                }
-            });
+        let if_conditions =
+            self.if_clause_
+                .as_ref()
+                .map_or_else(String::default, |cond| match cond {
+                    IfCluase::Exists => String::from("IF EXISTS"),
+                    IfCluase::Condition { clauses, values: _ } => {
+                        format!("IF {}", clauses.join(" AND "))
+                    }
+                });
         Ok(pretty_build([
             "DELETE",
             columns.as_str(),
@@ -199,11 +199,10 @@ impl Delete {
         let mut query = Query::new(self.build_query()?);
         self.request_params_.apply_to_query(&mut query);
 
-        let values = if let Some(if_clause) = &self.if_clause_ {
-            if_clause.extend_values(self.values_.clone())
-        } else {
-            self.values_.clone()
-        };
+        let values = self.if_clause_.as_ref().map_or_else(
+            || self.values_.clone(),
+            |if_clause| if_clause.extend_values(self.values_.clone()),
+        );
         scylla
             .get()
             .native_execute(py, Some(query), None, values, false)
@@ -221,11 +220,10 @@ impl Delete {
         let mut query = Query::new(self.build_query()?);
         self.request_params_.apply_to_query(&mut query);
 
-        let values = if let Some(if_clause) = &self.if_clause_ {
-            if_clause.extend_values(self.values_.clone())
-        } else {
-            self.values_.clone()
-        };
+        let values = self.if_clause_.as_ref().map_or_else(
+            || self.values_.clone(),
+            |if_clause| if_clause.extend_values(self.values_.clone()),
+        );
         let mut serialized = LegacySerializedValues::new();
         for val in values {
             serialized.add_value(&val)?;

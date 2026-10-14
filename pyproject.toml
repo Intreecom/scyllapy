@@ -95,6 +95,7 @@ ignore = [
   "PLR0913",  # Too many arguments for function call
   "D106",  # Missing docstring in public nested class
   "PYI021",  # Docstrings should not be included in stubs
+  "COM812",  # Missing trailing comma in a list or tuple
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -107,6 +108,7 @@ ignore = [
   "D101",  # Missing docstring in public class
   "PLR2004",  # Magic value used in comparison
   "B017",  # Do not assert blind exception
+  "S608",  # Possible SQL injection
 ]
 
 [tool.ruff.lint.pydocstyle]

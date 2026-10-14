@@ -109,9 +109,9 @@ pub struct ScyllaPyQuery {
     pub params: ScyllaPyRequestParams,
 }
 
-impl From<&ScyllaPyQuery> for ScyllaPyQuery {
-    fn from(value: &ScyllaPyQuery) -> Self {
-        ScyllaPyQuery {
+impl From<&Self> for ScyllaPyQuery {
+    fn from(value: &Self) -> Self {
+        Self {
             query: value.query.clone(),
             params: ScyllaPyRequestParams::default(),
         }

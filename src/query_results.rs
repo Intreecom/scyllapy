@@ -27,8 +27,8 @@ impl<'py> IntoPyObject<'py> for ScyllaPyQueryReturns {
 
     fn into_pyobject(self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         match self {
-            ScyllaPyQueryReturns::QueryResult(result) => result.into_bound_py_any(py),
-            ScyllaPyQueryReturns::IterableQueryResult(result) => result.into_bound_py_any(py),
+            Self::QueryResult(result) => result.into_bound_py_any(py),
+            Self::IterableQueryResult(result) => result.into_bound_py_any(py),
         }
     }
 }
@@ -42,7 +42,7 @@ pub struct ScyllaPyQueryResult {
 }
 
 impl ScyllaPyQueryResult {
-    pub fn new(results: QueryResult) -> Self {
+    pub const fn new(results: QueryResult) -> Self {
         Self { inner: results }
     }
     fn get_rows<'a>(
@@ -244,7 +244,7 @@ impl ScyllaPyIterableQueryResult {
     }
 
     #[must_use]
-    pub fn __aiter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+    pub const fn __aiter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
@@ -268,7 +268,7 @@ impl ScyllaPyIterableQueryResult {
             let mut row_iterator = streamer.lock().await;
             let row = row_iterator.next().await;
             let col_spec = row_iterator.get_column_specs();
-            match row {
+            let result = match row {
                 Some(val) => {
                     let row_val = val?;
                     // If user have chosen to iterate over scalars, we
@@ -302,7 +302,9 @@ impl ScyllaPyIterableQueryResult {
                     })
                 }
                 None => Err(PyStopAsyncIteration::new_err("No more rows").into()),
-            }
+            };
+            drop(row_iterator);
+            result
         });
         Ok(Some(future?.unbind()))
     }

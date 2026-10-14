@@ -109,8 +109,8 @@ pub enum ScyllaPyCQLDTO {
     Timestamp(chrono::DateTime<chrono::Utc>),
     Uuid(uuid::Uuid),
     Inet(IpAddr),
-    List(Vec<ScyllaPyCQLDTO>),
-    Map(Vec<(ScyllaPyCQLDTO, ScyllaPyCQLDTO)>),
+    List(Vec<Self>),
+    Map(Vec<(Self, Self)>),
     // UDT holds serialized bytes according to the protocol.
     Udt(Vec<u8>),
 }
@@ -118,37 +118,37 @@ pub enum ScyllaPyCQLDTO {
 impl Value for ScyllaPyCQLDTO {
     fn serialize(&self, buf: &mut Vec<u8>) -> Result<(), scylla::_macro_internal::ValueTooBig> {
         match self {
-            ScyllaPyCQLDTO::String(string) => string.serialize(buf),
-            ScyllaPyCQLDTO::BigInt(bigint) => bigint.serialize(buf),
-            ScyllaPyCQLDTO::Int(int) => int.serialize(buf),
-            ScyllaPyCQLDTO::SmallInt(smallint) => smallint.serialize(buf),
-            ScyllaPyCQLDTO::Bool(blob) => blob.serialize(buf),
-            ScyllaPyCQLDTO::Double(double) => double.0.serialize(buf),
-            ScyllaPyCQLDTO::Float(float) => float.0.serialize(buf),
-            ScyllaPyCQLDTO::Bytes(bytes) => bytes.serialize(buf),
-            ScyllaPyCQLDTO::Uuid(uuid) => uuid.serialize(buf),
-            ScyllaPyCQLDTO::Inet(inet) => inet.serialize(buf),
-            ScyllaPyCQLDTO::List(list) => list.serialize(buf),
-            ScyllaPyCQLDTO::Counter(counter) => counter.serialize(buf),
-            ScyllaPyCQLDTO::TinyInt(tinyint) => tinyint.serialize(buf),
-            ScyllaPyCQLDTO::Date(date) => date.serialize(buf),
-            ScyllaPyCQLDTO::Time(time) => time.serialize(buf),
-            ScyllaPyCQLDTO::Map(map) => map
+            Self::String(string) => string.serialize(buf),
+            Self::BigInt(bigint) => bigint.serialize(buf),
+            Self::Int(int) => int.serialize(buf),
+            Self::SmallInt(smallint) => smallint.serialize(buf),
+            Self::Bool(blob) => blob.serialize(buf),
+            Self::Double(double) => double.0.serialize(buf),
+            Self::Float(float) => float.0.serialize(buf),
+            Self::Bytes(bytes) => bytes.serialize(buf),
+            Self::Uuid(uuid) => uuid.serialize(buf),
+            Self::Inet(inet) => inet.serialize(buf),
+            Self::List(list) => list.serialize(buf),
+            Self::Counter(counter) => counter.serialize(buf),
+            Self::TinyInt(tinyint) => tinyint.serialize(buf),
+            Self::Date(date) => date.serialize(buf),
+            Self::Time(time) => time.serialize(buf),
+            Self::Map(map) => map
                 .iter()
                 .cloned()
                 .collect::<HashMap<_, _, BuildHasherDefault<rustc_hash::FxHasher>>>()
                 .serialize(buf),
-            ScyllaPyCQLDTO::Timestamp(timestamp) => {
+            Self::Timestamp(timestamp) => {
                 scylla::frame::value::CqlTimestamp::from(*timestamp).serialize(buf)
             }
-            ScyllaPyCQLDTO::Null => Option::<bool>::None.serialize(buf),
-            ScyllaPyCQLDTO::Udt(udt) => {
+            Self::Null => Option::<bool>::None.serialize(buf),
+            Self::Udt(udt) => {
                 buf.extend(udt);
                 Ok(())
             }
-            ScyllaPyCQLDTO::Decimal(decimal) => decimal.serialize(buf),
-            ScyllaPyCQLDTO::Unset => scylla::frame::value::Unset.serialize(buf),
-            ScyllaPyCQLDTO::Duration {
+            Self::Decimal(decimal) => decimal.serialize(buf),
+            Self::Unset => scylla::frame::value::Unset.serialize(buf),
+            Self::Duration {
                 months,
                 days,
                 nanoseconds,

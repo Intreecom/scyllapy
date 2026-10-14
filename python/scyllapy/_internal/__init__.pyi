@@ -1,13 +1,5 @@
-from typing import (
-    Any,
-    Callable,
-    Generic,
-    Iterable,
-    Literal,
-    Optional,
-    TypeVar,
-    overload,
-)
+from collections.abc import Callable, Iterable
+from typing import Any, Generic, Literal, TypeVar, overload
 
 from scyllapy._internal.load_balancing import LoadBalancingPolicy
 
@@ -134,7 +126,7 @@ class Scylla:
     async def batch(
         self,
         batch: Batch | InlineBatch,
-        params: Optional[Iterable[Iterable[Any] | dict[str, Any]]] = None,
+        params: Iterable[Iterable[Any] | dict[str, Any]] | None = None,
     ) -> QueryResult:
         """
         Execute a batch statement.
@@ -165,11 +157,11 @@ class QueryResult:
     trace_id: str | None
 
     @overload
-    def all(self, as_class: Literal[None] = None) -> list[dict[str, Any]]: ...
+    def all(self, as_class: None = None) -> list[dict[str, Any]]: ...
     @overload
     def all(self, as_class: Callable[..., _T] | None = None) -> list[_T]: ...
     @overload
-    def first(self, as_class: Literal[None] = None) -> dict[str, Any] | None: ...
+    def first(self, as_class: None = None) -> dict[str, Any] | None: ...
     @overload
     def first(self, as_class: Callable[..., _T] | None = None) -> _T | None: ...
     def scalars(self) -> list[Any]: ...

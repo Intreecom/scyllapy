@@ -42,7 +42,7 @@ impl Select {
         let columns = self
             .columns_
             .as_ref()
-            .map_or(String::from("*"), |cols| cols.join(","));
+            .map_or_else(|| String::from("*"), |cols| cols.join(","));
         let group_by = self
             .group_by_
             .as_ref()

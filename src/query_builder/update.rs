@@ -22,9 +22,9 @@ enum UpdateAssignment {
 impl Display for UpdateAssignment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            UpdateAssignment::Simple(name) => f.write_fmt(format_args!("{name} = ?")),
-            UpdateAssignment::Inc(left, right) => f.write_fmt(format_args!("{left} = {right} + ?")),
-            UpdateAssignment::Dec(left, right) => f.write_fmt(format_args!("{left} = {right} - ?")),
+            Self::Simple(name) => f.write_fmt(format_args!("{name} = ?")),
+            Self::Inc(left, right) => f.write_fmt(format_args!("{left} = {right} + ?")),
+            Self::Dec(left, right) => f.write_fmt(format_args!("{left} = {right} - ?")),
         }
     }
 }
@@ -88,15 +88,15 @@ impl Update {
             .join(", ");
 
         let where_clauses = self.where_clauses_.join(" AND ");
-        let if_conditions = self
-            .if_clause_
-            .as_ref()
-            .map_or(String::default(), |cond| match cond {
-                IfCluase::Exists => String::from("IF EXISTS"),
-                IfCluase::Condition { clauses, values: _ } => {
-                    format!("IF {}", clauses.join(" AND "))
-                }
-            });
+        let if_conditions =
+            self.if_clause_
+                .as_ref()
+                .map_or_else(String::default, |cond| match cond {
+                    IfCluase::Exists => String::from("IF EXISTS"),
+                    IfCluase::Condition { clauses, values: _ } => {
+                        format!("IF {}", clauses.join(" AND "))
+                    }
+                });
 
         Ok(pretty_build([
             "UPDATE",

@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 
 import pytest
-from tests.utils import random_string
-
 from scyllapy import Scylla
 from scyllapy.query_builder import Select
+
+from tests.utils import random_string
 
 
 @pytest.mark.anyio

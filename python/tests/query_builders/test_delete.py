@@ -1,8 +1,8 @@
 import pytest
-from tests.utils import random_string
-
 from scyllapy import Scylla
 from scyllapy.query_builder import Delete
+
+from tests.utils import random_string
 
 
 @pytest.mark.anyio
@@ -39,8 +39,13 @@ async def test_custom_if(scylla: Scylla) -> None:
         f"INSERT INTO {table_name}(id, name) VALUES (?, ?)",
         [1, "meme"],
     )
-    await Delete(table_name).where("id = ?", [1]).if_("name != ?", [None]).execute(
-        scylla,
+    await (
+        Delete(table_name)
+        .where("id = ?", [1])
+        .if_("name != ?", [None])
+        .execute(
+            scylla,
+        )
     )
     res = await scylla.execute(f"SELECT * FROM {table_name}")
     assert not res.all()
@@ -54,8 +59,13 @@ async def test_custom_custom_if(scylla: Scylla) -> None:
         f"INSERT INTO {table_name}(id, name) VALUES (?, ?)",
         [1, "meme"],
     )
-    await Delete(table_name).where("id = ?", [1]).if_("name != ?", [None]).execute(
-        scylla,
+    await (
+        Delete(table_name)
+        .where("id = ?", [1])
+        .if_("name != ?", [None])
+        .execute(
+            scylla,
+        )
     )
     res = await scylla.execute(f"SELECT * FROM {table_name}")
     assert not res.all()
