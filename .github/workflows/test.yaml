@@ -13,20 +13,20 @@ jobs:
           - mypy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
       - name: Run lint check
-        uses: pre-commit/action@v3.0.0
+        uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
         with:
           extra_args: -a ${{ matrix.cmd }}
   fmt:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v1
-    - uses: actions-rs/toolchain@v1
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    - uses: actions-rs/toolchain@b2417cde72dcf67f306c0ae8e0828a81bf0b189f # v1.0.6
       with:
         toolchain: stable
         components: rustfmt
@@ -39,13 +39,13 @@ jobs:
       checks: write
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v1
-    - uses: actions-rs/toolchain@v1
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    - uses: actions-rs/toolchain@b2417cde72dcf67f306c0ae8e0828a81bf0b189f # v1.0.6
       with:
         toolchain: stable
         components: clippy
         override: true
-    - uses: actions-rs/clippy-check@v1
+    - uses: actions-rs/clippy-check@9d09632661e31982c0be8af59aeb96b680641bc4 # v1.0.7
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
   pytest:
@@ -74,8 +74,8 @@ jobs:
             #   ssl_cmd: echo "Already installed"
     runs-on: ${{matrix.job.os}}
     steps:
-    - uses: actions/checkout@v1
-    - uses: actions-rs/toolchain@v1
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    - uses: actions-rs/toolchain@b2417cde72dcf67f306c0ae8e0828a81bf0b189f # v1.0.6
       with:
         toolchain: stable
         components: clippy
@@ -83,7 +83,7 @@ jobs:
     - name: Setup OpenSSL
       run: ${{matrix.job.ssl_cmd}}
     - name: Setup python for test ${{ matrix.py_version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
       with:
         python-version: ${{ matrix.py_version }}
     - name: Install tox
