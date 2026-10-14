@@ -2,8 +2,10 @@ use std::{collections::HashMap, hash::BuildHasherDefault, sync::Arc};
 
 use futures::StreamExt;
 use pyo3::{
-    exceptions::PyStopAsyncIteration, pyclass, pymethods, types::PyDict, IntoPy, Py, PyAny,
-    PyObject, PyRef, PyRefMut, Python, ToPyObject,
+    exceptions::PyStopAsyncIteration,
+    pyclass, pymethods,
+    types::{PyDict, PyDictMethods},
+    Bound, IntoPyObject, IntoPyObjectExt, Py, PyAny, PyErr, PyRef, PyRefMut, PyResult, Python,
 };
 use scylla::{transport::iterator::RowIterator, QueryResult};
 use tokio::sync::Mutex;
@@ -18,14 +20,21 @@ pub enum ScyllaPyQueryReturns {
     IterableQueryResult(ScyllaPyIterableQueryResult),
 }
 
-impl IntoPy<Py<PyAny>> for ScyllaPyQueryReturns {
-    fn into_py(self, py: Python<'_>) -> Py<PyAny> {
+impl<'py> IntoPyObject<'py> for ScyllaPyQueryReturns {
+    type Target = PyAny;
+    type Output = Bound<'py, PyAny>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         match self {
-            ScyllaPyQueryReturns::QueryResult(result) => result.into_py(py),
-            ScyllaPyQueryReturns::IterableQueryResult(result) => result.into_py(py),
+            Self::QueryResult(result) => result.into_bound_py_any(py),
+            Self::IterableQueryResult(result) => result.into_bound_py_any(py),
         }
     }
 }
+
+/// A single row of query results: a mapping from column name to Python object.
+type PyRow<'a> = rustc_hash::FxHashMap<&'a str, Bound<'a, PyAny>>;
 
 #[pyclass(name = "QueryResult")]
 pub struct ScyllaPyQueryResult {
@@ -33,14 +42,14 @@ pub struct ScyllaPyQueryResult {
 }
 
 impl ScyllaPyQueryResult {
-    pub fn new(results: QueryResult) -> Self {
+    pub const fn new(results: QueryResult) -> Self {
         Self { inner: results }
     }
     fn get_rows<'a>(
         &'a self,
         py: Python<'a>,
         limit: Option<usize>,
-    ) -> ScyllaPyResult<Option<Vec<rustc_hash::FxHashMap<&'a str, &'a PyAny>>>> {
+    ) -> ScyllaPyResult<Option<Vec<PyRow<'a>>>> {
         let Some(rows) = &self.inner.rows else {
             return Ok(None);
         };
@@ -85,15 +94,18 @@ impl ScyllaPyQueryResult {
     /// # Errors
     ///
     /// May return an error if the query should not return any row.
+    #[pyo3(signature = (as_class = None))]
     pub fn all(&self, py: Python<'_>, as_class: Option<Py<PyAny>>) -> ScyllaPyResult<Py<PyAny>> {
         let Some(rows) = self.get_rows(py, None)? else {
             return Err(ScyllaPyError::NoReturnsError);
         };
-        let py_rows = rows.to_object(py);
+        let py_rows = rows.into_bound_py_any(py)?;
         if let Some(as_class) = as_class {
-            return Ok(map_rows(py, &py_rows, &as_class)?.to_object(py));
+            return Ok(map_rows(py, &py_rows, &as_class)?
+                .into_bound_py_any(py)?
+                .unbind());
         }
-        Ok(py_rows)
+        Ok(py_rows.unbind())
     }
 
     /// Get only the first row.
@@ -105,24 +117,23 @@ impl ScyllaPyQueryResult {
     ///
     /// Error can be returned if query didn't mean to return
     /// anything.
+    #[pyo3(signature = (as_class = None))]
     pub fn first(
         &self,
         py: Python<'_>,
         as_class: Option<Py<PyAny>>,
     ) -> ScyllaPyResult<Option<Py<PyAny>>> {
-        let Some(rows) = self.get_rows(py, Some(1))? else {
+        let Some(mut rows) = self.get_rows(py, Some(1))? else {
             return Err(ScyllaPyError::NoReturnsError);
         };
         if rows.is_empty() {
             return Ok(None);
         }
         if let Some(as_class) = as_class {
-            let py_rows = rows.to_object(py);
-            return Ok(map_rows(py, &py_rows, &as_class)?
-                .first()
-                .map(|val| val.to_object(py)));
+            let py_rows = rows.into_bound_py_any(py)?;
+            return Ok(map_rows(py, &py_rows, &as_class)?.into_iter().next());
         }
-        Ok(Some(rows[0].to_object(py)))
+        Ok(Some(rows.remove(0).into_bound_py_any(py)?.unbind()))
     }
 
     /// Function to get first column of every row.
@@ -140,7 +151,7 @@ impl ScyllaPyQueryResult {
             return Err(ScyllaPyError::NoReturnsError);
         };
         if rows.is_empty() {
-            return Ok(Some(rows.to_object(py)));
+            return Ok(Some(rows.into_bound_py_any(py)?.unbind()));
         }
         let Some(col_name) = self.inner.col_specs.first() else {
             return Err(ScyllaPyError::NoColumns);
@@ -149,7 +160,8 @@ impl ScyllaPyQueryResult {
             rows.iter()
                 .filter_map(|row| row.get(col_name.name.as_str()))
                 .collect::<Vec<_>>()
-                .to_object(py),
+                .into_bound_py_any(py)?
+                .unbind(),
         ))
     }
 
@@ -176,7 +188,8 @@ impl ScyllaPyQueryResult {
         Ok(Some(
             rows.first()
                 .and_then(|row| row.get(col_name.name.as_str()))
-                .to_object(py),
+                .into_bound_py_any(py)?
+                .unbind(),
         ))
     }
 
@@ -193,10 +206,9 @@ impl ScyllaPyQueryResult {
     }
 
     #[getter]
-    pub fn trace_id<'a>(&'a self, py: Python<'a>) -> Option<Py<PyAny>> {
-        self.inner
-            .tracing_id
-            .map(|uid| uid.to_string().to_object(py))
+    pub fn trace_id(&self, py: Python<'_>) -> Option<Py<PyAny>> {
+        let uid = self.inner.tracing_id?;
+        Some(uid.to_string().into_bound_py_any(py).ok()?.unbind())
     }
 }
 
@@ -232,7 +244,7 @@ impl ScyllaPyIterableQueryResult {
     }
 
     #[must_use]
-    pub fn __aiter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+    pub const fn __aiter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
@@ -247,16 +259,16 @@ impl ScyllaPyIterableQueryResult {
     /// * No columns in a row.
     /// * Cannot convert column to python object.
     /// * Cannot acquire GIL.
-    pub fn __anext__(&self, py: Python<'_>) -> ScyllaPyResult<Option<PyObject>> {
+    pub fn __anext__(&self, py: Python<'_>) -> ScyllaPyResult<Option<Py<PyAny>>> {
         let streamer = self.inner.clone();
-        let map_function = self.mapper.clone();
+        let map_function = self.mapper.as_ref().map(|mapper| mapper.clone_ref(py));
         let scalars = self.scalars;
         // Here we create our future that actually yields row.
         let future = scyllapy_future(py, async move {
             let mut row_iterator = streamer.lock().await;
             let row = row_iterator.next().await;
             let col_spec = row_iterator.get_column_specs();
-            match row {
+            let result = match row {
                 Some(val) => {
                     let row_val = val?;
                     // If user have chosen to iterate over scalars, we
@@ -264,12 +276,12 @@ impl ScyllaPyIterableQueryResult {
                     if scalars {
                         let spec = col_spec.first().ok_or(ScyllaPyError::NoColumns)?;
                         let a = row_val.columns.first().ok_or(ScyllaPyError::NoColumns)?;
-                        return Python::with_gil(|gil| {
-                            Ok(cql_to_py(gil, &spec.name, &spec.typ, a.as_ref())?.into_py(gil))
+                        return Python::attach(|gil| {
+                            Ok(cql_to_py(gil, &spec.name, &spec.typ, a.as_ref())?.unbind())
                         });
                     }
                     // Here we acquire GIL and map row to python object.
-                    Python::with_gil(move |gil| -> ScyllaPyResult<Py<PyAny>> {
+                    Python::attach(move |gil| -> ScyllaPyResult<Py<PyAny>> {
                         let row_dict = PyDict::new(gil);
                         for (col_index, column) in row_val.columns.iter().enumerate() {
                             row_dict.set_item(
@@ -283,15 +295,17 @@ impl ScyllaPyIterableQueryResult {
                             )?;
                         }
                         if let Some(mapper) = map_function {
-                            Ok(mapper.call(gil, (), Some(row_dict))?.into_py(gil))
+                            Ok(mapper.call(gil, (), Some(&row_dict))?)
                         } else {
                             Ok(row_dict.into())
                         }
                     })
                 }
                 None => Err(PyStopAsyncIteration::new_err("No more rows").into()),
-            }
+            };
+            drop(row_iterator);
+            result
         });
-        Ok(Some(future?.into()))
+        Ok(Some(future?.unbind()))
     }
 }

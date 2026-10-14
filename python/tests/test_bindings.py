@@ -2,14 +2,15 @@ import datetime
 import ipaddress
 import random
 import uuid
+from collections.abc import Callable
 from decimal import Decimal
-from typing import Any, Callable
+from typing import Any
 
 import pytest
 from dateutil.relativedelta import relativedelta
-from tests.utils import random_string
-
 from scyllapy import Scylla
+
+from tests.utils import random_string
 
 
 @pytest.mark.anyio

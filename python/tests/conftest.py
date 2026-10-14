@@ -1,10 +1,10 @@
 import os
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import pytest
-from tests.utils import random_string
-
 from scyllapy import Scylla
+
+from tests.utils import random_string
 
 
 @pytest.fixture(scope="session")

@@ -1,7 +1,7 @@
 use pyo3::{
     pyclass, pymethods,
-    types::{PyDict, PyTuple},
-    PyAny, PyRefMut, Python,
+    types::{PyAnyMethods, PyDict, PyTuple},
+    Bound, PyAny, PyRefMut, Python,
 };
 use scylla::query::Query;
 
@@ -16,8 +16,9 @@ use crate::{
 use super::utils::{pretty_build, Timeout};
 use scylla::frame::value::LegacySerializedValues;
 
-#[pyclass]
+#[pyclass(skip_from_py_object)]
 #[derive(Clone, Debug, Default)]
+#[allow(clippy::struct_field_names)]
 pub struct Select {
     table_: String,
     distinct_: bool,
@@ -41,7 +42,7 @@ impl Select {
         let columns = self
             .columns_
             .as_ref()
-            .map_or(String::from("*"), |cols| cols.join(","));
+            .map_or_else(|| String::from("*"), |cols| cols.join(","));
         let group_by = self
             .group_by_
             .as_ref()
@@ -126,7 +127,7 @@ impl Select {
     #[pyo3(signature = (*columns))]
     pub fn only<'a>(
         mut slf: PyRefMut<'a, Self>,
-        columns: &'a PyTuple,
+        columns: &'a Bound<'a, PyTuple>,
     ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         let cols = columns.extract::<Vec<String>>()?;
         slf.columns_ = Some(cols);
@@ -148,12 +149,12 @@ impl Select {
     pub fn r#where<'a>(
         mut slf: PyRefMut<'a, Self>,
         clause: String,
-        values: Option<Vec<&'a PyAny>>,
+        values: Option<Vec<Bound<'a, PyAny>>>,
     ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         slf.where_clauses_.push(clause);
         if let Some(vals) = values {
             for value in vals {
-                slf.values_.push(py_to_value(value, None)?);
+                slf.values_.push(py_to_value(&value, None)?);
             }
         }
         Ok(slf)
@@ -226,7 +227,7 @@ impl Select {
     #[pyo3(signature = (**params))]
     pub fn request_params<'a>(
         mut slf: PyRefMut<'a, Self>,
-        params: Option<&'a PyDict>,
+        params: Option<&'a Bound<'a, PyDict>>,
     ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         slf.request_params_ = ScyllaPyRequestParams::from_dict(params)?;
         Ok(slf)
@@ -243,12 +244,14 @@ impl Select {
     pub fn execute<'a>(
         &'a self,
         py: Python<'a>,
-        scylla: &'a Scylla,
+        scylla: &'a Bound<'a, Scylla>,
         paged: bool,
-    ) -> ScyllaPyResult<&'a PyAny> {
+    ) -> ScyllaPyResult<Bound<'a, PyAny>> {
         let mut query = Query::new(self.build_query());
         self.request_params_.apply_to_query(&mut query);
-        scylla.native_execute(py, Some(query), None, self.values_.clone(), paged)
+        scylla
+            .get()
+            .native_execute(py, Some(query), None, self.values_.clone(), paged)
     }
 
     /// Add to batch
@@ -286,7 +289,7 @@ impl Select {
     }
 
     #[must_use]
-    pub fn __deepcopy__(&self, _memo: &PyDict) -> Self {
+    pub fn __deepcopy__(&self, _memo: &Bound<'_, PyDict>) -> Self {
         self.clone()
     }
 }

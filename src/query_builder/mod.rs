@@ -1,4 +1,7 @@
-use pyo3::{types::PyModule, PyResult, Python};
+use pyo3::{
+    types::{PyModule, PyModuleMethods},
+    Bound, PyResult, Python,
+};
 
 use self::{delete::Delete, insert::Insert, select::Select, update::Update};
 
@@ -17,7 +20,7 @@ mod utils;
 ///
 /// * Cannot create module by any reason.
 /// * Cannot add class by some reason.
-pub fn setup_module(_py: Python<'_>, module: &PyModule) -> PyResult<()> {
+pub fn setup_module(_py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<Select>()?;
     module.add_class::<Insert>()?;
     module.add_class::<Delete>()?;

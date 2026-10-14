@@ -14,11 +14,11 @@ use openssl::{
     ssl::{SslContextBuilder, SslMethod, SslVerifyMode},
     x509::X509,
 };
-use pyo3::{pyclass, pymethods, PyAny, Python};
+use pyo3::{pyclass, pymethods, Bound, PyAny, Python};
 use scylla::{frame::value::ValueList, prepared_statement::PreparedStatement, query::Query};
 
 /// SSL verification mode.
-#[pyclass(name = "SSLVerifyMode")]
+#[pyclass(name = "SSLVerifyMode", from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[allow(non_camel_case_types)]
 pub enum ScyllaPySSLVerifyMode {
@@ -40,8 +40,9 @@ impl From<ScyllaPySSLVerifyMode> for SslVerifyMode {
     }
 }
 
-#[pyclass(frozen, weakref)]
+#[pyclass(frozen, weakref, skip_from_py_object)]
 #[derive(Clone)]
+#[allow(clippy::struct_field_names)]
 pub struct Scylla {
     contact_points: Vec<String>,
     username: Option<String>,
@@ -84,7 +85,7 @@ impl Scylla {
         prepared: Option<PreparedStatement>,
         values: impl ValueList + Send + 'static,
         paged: bool,
-    ) -> ScyllaPyResult<&'a PyAny> {
+    ) -> ScyllaPyResult<Bound<'a, PyAny>> {
         let session_arc = self.scylla_session.clone();
         scyllapy_future(py, async move {
             let session_guard = session_arc.read().await;
@@ -92,7 +93,7 @@ impl Scylla {
                 "Session is not initialized.".into(),
             ))?;
             // let res = session.query(query, values).await?;
-            if paged {
+            let result = if paged {
                 match (query, prepared) {
                     (Some(query), None) => Ok(ScyllaPyQueryReturns::IterableQueryResult(
                         ScyllaPyIterableQueryResult::new(
@@ -122,9 +123,10 @@ impl Scylla {
                         "You should pass either query or prepared query.".into(),
                     )),
                 }
-            }
+            };
+            drop(session_guard);
+            result
         })
-        .map_err(Into::into)
     }
 }
 
@@ -173,7 +175,7 @@ impl Scylla {
         disallow_shard_aware_port: Option<bool>,
         default_execution_profile: Option<ScyllaPyExecutionProfile>,
     ) -> Self {
-        Scylla {
+        Self {
             contact_points,
             username,
             password,
@@ -206,12 +208,11 @@ impl Scylla {
     /// * The session is already initialized;
     /// * Username passed without password and vice versa;
     /// * Cannot connect to the database.
-    pub fn startup<'a>(&'a self, py: Python<'a>) -> ScyllaPyResult<&'a PyAny> {
+    pub fn startup<'a>(&'a self, py: Python<'a>) -> ScyllaPyResult<Bound<'a, PyAny>> {
         let contact_points = self.contact_points.clone();
         let username = self.username.clone();
         let password = self.password.clone();
-        let mut ssl_context = None;
-        if let Some(cert_data) = self.ssl_cert.clone() {
+        let ssl_context = if let Some(cert_data) = self.ssl_cert.clone() {
             let mut ssl_context_builder = SslContextBuilder::new(SslMethod::tls())?;
             let pem = X509::from_pem(cert_data.as_bytes())?;
             // If we have private key, we need to add it to context.
@@ -232,8 +233,10 @@ impl Scylla {
 
             ssl_context_builder.set_certificate(&pem)?;
             ssl_context_builder.set_verify(verify_mode);
-            ssl_context = Some(ssl_context_builder.build());
-        }
+            Some(ssl_context_builder.build())
+        } else {
+            None
+        };
         let keyspace = self.keyspace.clone();
         let scylla_session = self.scylla_session.clone();
         let conn_timeout = self.connection_timeout;
@@ -304,6 +307,7 @@ impl Scylla {
             }
             let mut session_guard = scylla_session.write().await;
             *session_guard = Some(Box::pin(session_builder.build()).await?);
+            drop(session_guard);
             Ok(())
         })
     }
@@ -314,7 +318,7 @@ impl Scylla {
     ///
     /// Returns error if session wasn't initialized before
     /// calling this method.
-    pub fn shutdown<'a>(&'a self, py: Python<'a>) -> ScyllaPyResult<&'a PyAny> {
+    pub fn shutdown<'a>(&'a self, py: Python<'a>) -> ScyllaPyResult<Bound<'a, PyAny>> {
         let session = self.scylla_session.clone();
         scyllapy_future(py, async move {
             let mut guard = session.write().await;
@@ -324,6 +328,7 @@ impl Scylla {
                 ));
             }
             guard.take();
+            drop(guard);
             Ok(())
         })
     }
@@ -344,15 +349,16 @@ impl Scylla {
         &'a self,
         py: Python<'a>,
         query: ExecuteInput,
-        params: Option<&'a PyAny>,
+        params: Option<&'a Bound<'a, PyAny>>,
         paged: bool,
-    ) -> ScyllaPyResult<&'a PyAny> {
-        let mut col_spec = None;
+    ) -> ScyllaPyResult<Bound<'a, PyAny>> {
         // We need to prepare parameter we're going to use
         // in query.
-        if let ExecuteInput::PreparedQuery(prepared) = &query {
-            col_spec = Some(prepared.inner.get_prepared_metadata().col_specs.as_ref());
-        }
+        let col_spec = if let ExecuteInput::PreparedQuery(prepared) = &query {
+            Some(prepared.inner.get_prepared_metadata().col_specs.as_ref())
+        } else {
+            None
+        };
         let query_params = parse_python_query_params(params, true, col_spec)?;
         // We need this clone, to safely share the session between threads.
         let (query, prepared) = match query {
@@ -375,8 +381,8 @@ impl Scylla {
         &'a self,
         py: Python<'a>,
         batch: BatchInput,
-        params: Option<Vec<&'a PyAny>>,
-    ) -> ScyllaPyResult<&'a PyAny> {
+        params: Option<Vec<Bound<'a, PyAny>>>,
+    ) -> ScyllaPyResult<Bound<'a, PyAny>> {
         // We need to prepare parameter we're going to use
         // in query.
         // If parameters were passed, we parse python values,
@@ -388,7 +394,7 @@ impl Scylla {
                 if let Some(passed_params) = params {
                     for query_params in passed_params {
                         batch_params.push(parse_python_query_params(
-                            Some(query_params),
+                            Some(&query_params),
                             false,
                             None,
                         )?);
@@ -406,9 +412,9 @@ impl Scylla {
                 "Session is not initialized.".into(),
             ))?;
             let res = session.batch(&batch, batch_params).await?;
+            drop(session_guard);
             Ok(ScyllaPyQueryResult::new(res))
         })
-        .map_err(Into::into)
     }
 
     /// Prepare a query.
@@ -426,7 +432,7 @@ impl Scylla {
         &'a self,
         python: Python<'a>,
         query: PrepareInput,
-    ) -> ScyllaPyResult<&'a PyAny> {
+    ) -> ScyllaPyResult<Bound<'a, PyAny>> {
         let session_arc = self.scylla_session.clone();
         scyllapy_future(python, async move {
             let cql_query = Query::from(query);
@@ -435,6 +441,7 @@ impl Scylla {
                 "Session is not initialized.".into(),
             ))?;
             let prepared = session.prepare(cql_query).await?;
+            drop(session_guard);
             Ok(ScyllaPyPreparedQuery::from(prepared))
         })
     }
@@ -448,7 +455,7 @@ impl Scylla {
         &'a self,
         python: Python<'a>,
         keyspace: String,
-    ) -> ScyllaPyResult<&'a PyAny> {
+    ) -> ScyllaPyResult<Bound<'a, PyAny>> {
         let session_arc = self.scylla_session.clone();
         scyllapy_future(python, async move {
             let guard = session_arc.write().await;
@@ -456,6 +463,7 @@ impl Scylla {
                 "Session is not initialized.".into(),
             ))?;
             session.use_keyspace(keyspace, true).await?;
+            drop(guard);
             Ok(())
         })
     }
@@ -465,7 +473,7 @@ impl Scylla {
     /// # Errors
     /// May return an error, if
     /// sessions was not initialized.
-    pub fn get_keyspace<'a>(&'a self, python: Python<'a>) -> ScyllaPyResult<&'a PyAny> {
+    pub fn get_keyspace<'a>(&'a self, python: Python<'a>) -> ScyllaPyResult<Bound<'a, PyAny>> {
         let session_arc = self.scylla_session.clone();
         scyllapy_future(python, async move {
             let guard = session_arc.write().await;
@@ -473,6 +481,7 @@ impl Scylla {
                 "Session is not initialized.".into(),
             ))?;
             let keyspace = session.get_keyspace().map(|ks| (*ks).clone());
+            drop(guard);
             Ok(keyspace)
         })
     }

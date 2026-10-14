@@ -1,8 +1,12 @@
 use std::{collections::HashMap, future::Future, hash::BuildHasherDefault, str::FromStr};
 
 use pyo3::{
-    types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyModule, PySet, PyString, PyTuple},
-    IntoPy, Py, PyAny, PyObject, PyResult, Python, ToPyObject,
+    types::{
+        PyAnyMethods, PyBool, PyBytes, PyDict, PyDictMethods, PyFloat, PyInt, PyList,
+        PyListMethods, PyModule, PyModuleMethods, PySet, PyString, PyStringMethods, PyTuple,
+        PyTupleMethods, PyTypeMethods,
+    },
+    Bound, IntoPyObject, IntoPyObjectExt, Py, PyAny, PyErr, PyResult, Python,
 };
 use scylla::{
     frame::{
@@ -41,21 +45,21 @@ const DATE_FORMAT: &[::time::format_description::FormatItem<'static>] =
 /// or modify `sys.modules` attr.
 pub fn add_submodule(
     py: Python<'_>,
-    parent_mod: &PyModule,
+    parent_mod: &Bound<'_, PyModule>,
     name: &'static str,
-    module_constuctor: impl FnOnce(Python<'_>, &PyModule) -> PyResult<()>,
+    module_constuctor: impl FnOnce(Python<'_>, &Bound<'_, PyModule>) -> PyResult<()>,
 ) -> PyResult<()> {
     let sub_module = PyModule::new(py, name)?;
-    module_constuctor(py, sub_module)?;
-    parent_mod.add_submodule(sub_module)?;
+    module_constuctor(py, &sub_module)?;
+    parent_mod.add_submodule(&sub_module)?;
     py.import("sys")?
         .getattr("modules")?
-        .set_item(format!("{}.{name}", parent_mod.name()?), sub_module)?;
+        .set_item(format!("{}.{name}", parent_mod.name()?), &sub_module)?;
     Ok(())
 }
 
 /// Small function to integrate custom result type
-/// and `pyo3_asyncio`.
+/// and `pyo3_async_runtimes`.
 ///
 /// It's almost the same as `future_into_py`,
 /// but it expects future to return `ScyllaPyResult` type, rather
@@ -64,13 +68,13 @@ pub fn add_submodule(
 /// # Errors
 ///
 /// If result of a future was unsuccessful, it propagates the error.
-pub fn scyllapy_future<F, T>(py: Python<'_>, fut: F) -> ScyllaPyResult<&PyAny>
+pub fn scyllapy_future<F, T>(py: Python<'_>, fut: F) -> ScyllaPyResult<Bound<'_, PyAny>>
 where
     F: Future<Output = ScyllaPyResult<T>> + Send + 'static,
-    T: IntoPy<PyObject>,
+    T: for<'py> IntoPyObject<'py> + Send + 'static,
 {
-    let res = pyo3_asyncio::tokio::future_into_py(py, async { fut.await.map_err(Into::into) })
-        .map(Into::into)?;
+    let res =
+        pyo3_async_runtimes::tokio::future_into_py(py, async { fut.await.map_err(Into::into) })?;
     Ok(res)
 }
 
@@ -105,8 +109,8 @@ pub enum ScyllaPyCQLDTO {
     Timestamp(chrono::DateTime<chrono::Utc>),
     Uuid(uuid::Uuid),
     Inet(IpAddr),
-    List(Vec<ScyllaPyCQLDTO>),
-    Map(Vec<(ScyllaPyCQLDTO, ScyllaPyCQLDTO)>),
+    List(Vec<Self>),
+    Map(Vec<(Self, Self)>),
     // UDT holds serialized bytes according to the protocol.
     Udt(Vec<u8>),
 }
@@ -114,37 +118,37 @@ pub enum ScyllaPyCQLDTO {
 impl Value for ScyllaPyCQLDTO {
     fn serialize(&self, buf: &mut Vec<u8>) -> Result<(), scylla::_macro_internal::ValueTooBig> {
         match self {
-            ScyllaPyCQLDTO::String(string) => string.serialize(buf),
-            ScyllaPyCQLDTO::BigInt(bigint) => bigint.serialize(buf),
-            ScyllaPyCQLDTO::Int(int) => int.serialize(buf),
-            ScyllaPyCQLDTO::SmallInt(smallint) => smallint.serialize(buf),
-            ScyllaPyCQLDTO::Bool(blob) => blob.serialize(buf),
-            ScyllaPyCQLDTO::Double(double) => double.0.serialize(buf),
-            ScyllaPyCQLDTO::Float(float) => float.0.serialize(buf),
-            ScyllaPyCQLDTO::Bytes(bytes) => bytes.serialize(buf),
-            ScyllaPyCQLDTO::Uuid(uuid) => uuid.serialize(buf),
-            ScyllaPyCQLDTO::Inet(inet) => inet.serialize(buf),
-            ScyllaPyCQLDTO::List(list) => list.serialize(buf),
-            ScyllaPyCQLDTO::Counter(counter) => counter.serialize(buf),
-            ScyllaPyCQLDTO::TinyInt(tinyint) => tinyint.serialize(buf),
-            ScyllaPyCQLDTO::Date(date) => date.serialize(buf),
-            ScyllaPyCQLDTO::Time(time) => time.serialize(buf),
-            ScyllaPyCQLDTO::Map(map) => map
+            Self::String(string) => string.serialize(buf),
+            Self::BigInt(bigint) => bigint.serialize(buf),
+            Self::Int(int) => int.serialize(buf),
+            Self::SmallInt(smallint) => smallint.serialize(buf),
+            Self::Bool(blob) => blob.serialize(buf),
+            Self::Double(double) => double.0.serialize(buf),
+            Self::Float(float) => float.0.serialize(buf),
+            Self::Bytes(bytes) => bytes.serialize(buf),
+            Self::Uuid(uuid) => uuid.serialize(buf),
+            Self::Inet(inet) => inet.serialize(buf),
+            Self::List(list) => list.serialize(buf),
+            Self::Counter(counter) => counter.serialize(buf),
+            Self::TinyInt(tinyint) => tinyint.serialize(buf),
+            Self::Date(date) => date.serialize(buf),
+            Self::Time(time) => time.serialize(buf),
+            Self::Map(map) => map
                 .iter()
                 .cloned()
                 .collect::<HashMap<_, _, BuildHasherDefault<rustc_hash::FxHasher>>>()
                 .serialize(buf),
-            ScyllaPyCQLDTO::Timestamp(timestamp) => {
+            Self::Timestamp(timestamp) => {
                 scylla::frame::value::CqlTimestamp::from(*timestamp).serialize(buf)
             }
-            ScyllaPyCQLDTO::Null => Option::<bool>::None.serialize(buf),
-            ScyllaPyCQLDTO::Udt(udt) => {
+            Self::Null => Option::<bool>::None.serialize(buf),
+            Self::Udt(udt) => {
                 buf.extend(udt);
                 Ok(())
             }
-            ScyllaPyCQLDTO::Decimal(decimal) => decimal.serialize(buf),
-            ScyllaPyCQLDTO::Unset => scylla::frame::value::Unset.serialize(buf),
-            ScyllaPyCQLDTO::Duration {
+            Self::Decimal(decimal) => decimal.serialize(buf),
+            Self::Unset => scylla::frame::value::Unset.serialize(buf),
+            Self::Duration {
                 months,
                 days,
                 nanoseconds,
@@ -170,7 +174,7 @@ impl Value for ScyllaPyCQLDTO {
 /// value cannot be converted or unnown type was passed.
 #[allow(clippy::too_many_lines)]
 pub fn py_to_value(
-    item: &PyAny,
+    item: &Bound<'_, PyAny>,
     column_type: Option<&ColumnType>,
 ) -> ScyllaPyResult<ScyllaPyCQLDTO> {
     if item.is_none() {
@@ -198,29 +202,29 @@ pub fn py_to_value(
         }
     } else if item.is_instance_of::<SmallInt>() {
         Ok(ScyllaPyCQLDTO::SmallInt(
-            item.extract::<SmallInt>()?.get_value(),
+            item.extract::<SmallInt>().map_err(PyErr::from)?.get_value(),
         ))
     } else if item.is_instance_of::<TinyInt>() {
         Ok(ScyllaPyCQLDTO::TinyInt(
-            item.extract::<TinyInt>()?.get_value(),
+            item.extract::<TinyInt>().map_err(PyErr::from)?.get_value(),
         ))
     } else if item.is_instance_of::<BigInt>() {
         Ok(ScyllaPyCQLDTO::BigInt(
-            item.extract::<BigInt>()?.get_value(),
+            item.extract::<BigInt>().map_err(PyErr::from)?.get_value(),
         ))
     } else if item.is_instance_of::<Double>() {
         Ok(ScyllaPyCQLDTO::Double(eq_float::F64(
-            item.extract::<Double>()?.get_value(),
+            item.extract::<Double>().map_err(PyErr::from)?.get_value(),
         )))
     } else if item.is_instance_of::<Counter>() {
         Ok(ScyllaPyCQLDTO::Counter(
-            item.extract::<Counter>()?.get_value(),
+            item.extract::<Counter>().map_err(PyErr::from)?.get_value(),
         ))
     } else if item.is_instance_of::<PyBytes>() {
         Ok(ScyllaPyCQLDTO::Bytes(item.extract::<Vec<u8>>()?))
     } else if item.hasattr("__dump_udt__")? {
         let dumped = item.call_method0("__dump_udt__")?;
-        let dumped_py = dumped.downcast::<PyList>().map_err(|err| {
+        let dumped_py = dumped.cast::<PyList>().map_err(|err| {
             ScyllaPyError::BindingError(format!(
                 "Cannot get UDT values. __dump_udt__ has returned not a list value. {err}"
             ))
@@ -231,7 +235,7 @@ pub fn py_to_value(
         buf.put_i32(0);
         for val in dumped_py {
             // Here we serialize all fields.
-            py_to_value(val, None)?
+            py_to_value(&val, None)?
                 .serialize(buf.as_mut())
                 .map_err(|err| {
                     ScyllaPyError::BindingError(format!(
@@ -296,22 +300,22 @@ pub fn py_to_value(
         || item.is_instance_of::<PySet>()
     {
         let mut items = Vec::new();
-        for inner in item.iter()? {
-            items.push(py_to_value(inner?, column_type)?);
+        for inner in item.try_iter()? {
+            items.push(py_to_value(&inner?, column_type)?);
         }
         Ok(ScyllaPyCQLDTO::List(items))
     } else if item.is_instance_of::<PyDict>() {
         let dict = item
-            .downcast::<PyDict>()
+            .cast::<PyDict>()
             .map_err(|err| ScyllaPyError::BindingError(format!("Cannot cast to dict: {err}")))?;
         let mut items = Vec::new();
         for dict_item in dict.items() {
-            let item_tuple = dict_item.downcast::<PyTuple>().map_err(|err| {
+            let item_tuple = dict_item.cast::<PyTuple>().map_err(|err| {
                 ScyllaPyError::BindingError(format!("Cannot cast to tuple: {err}"))
             })?;
             items.push((
-                py_to_value(item_tuple.get_item(0)?, column_type)?,
-                py_to_value(item_tuple.get_item(1)?, column_type)?,
+                py_to_value(&item_tuple.get_item(0)?, column_type)?,
+                py_to_value(&item_tuple.get_item(1)?, column_type)?,
             ));
         }
         Ok(ScyllaPyCQLDTO::Map(items))
@@ -344,46 +348,46 @@ pub fn cql_to_py<'a>(
     col_name: &'a str,
     cql_type: &'a ColumnType,
     cql_value: Option<&CqlValue>,
-) -> ScyllaPyResult<&'a PyAny> {
+) -> ScyllaPyResult<Bound<'a, PyAny>> {
     let Some(unwrapped_value) = cql_value else {
-        return Ok(py.None().into_ref(py));
+        return Ok(py.None().into_bound(py));
     };
     match cql_type {
         ColumnType::Ascii => unwrapped_value
             .as_ascii()
             .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "ASCII"))
-            .map(|val| PyString::new(py, val).as_ref()),
+            .map(|val| PyString::new(py, val).into_any()),
         ColumnType::Boolean => unwrapped_value
             .as_boolean()
             .ok_or(ScyllaPyError::ValueDowncastError(
                 col_name.into(),
                 "Boolean",
             ))
-            .map(|val| PyBool::new(py, val).as_ref()),
+            .and_then(|val| val.into_bound_py_any(py).map_err(Into::into)),
         ColumnType::Blob => unwrapped_value
             .as_blob()
             .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Blob"))
-            .map(|val| PyBytes::new(py, val.as_ref()).as_ref()),
+            .map(|val| PyBytes::new(py, val.as_ref()).into_any()),
         ColumnType::Double => unwrapped_value
             .as_double()
             .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Double"))
-            .map(|val| val.to_object(py).into_ref(py)),
+            .and_then(|val| val.into_bound_py_any(py).map_err(Into::into)),
         ColumnType::Float => unwrapped_value
             .as_float()
             .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Float"))
-            .map(|val| val.to_object(py).into_ref(py)),
+            .and_then(|val| val.into_bound_py_any(py).map_err(Into::into)),
         ColumnType::Int => unwrapped_value
             .as_int()
             .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Int"))
-            .map(|val| val.to_object(py).into_ref(py)),
+            .and_then(|val| val.into_bound_py_any(py).map_err(Into::into)),
         ColumnType::BigInt => unwrapped_value
             .as_bigint()
             .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "BigInt"))
-            .map(|val| val.to_object(py).into_ref(py)),
+            .and_then(|val| val.into_bound_py_any(py).map_err(Into::into)),
         ColumnType::Text => unwrapped_value
             .as_text()
             .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Text"))
-            .map(|val| val.to_object(py).into_ref(py)),
+            .and_then(|val| val.into_bound_py_any(py).map_err(Into::into)),
         ColumnType::List(column_type) => {
             let items = unwrapped_value
                 .as_list()
@@ -391,26 +395,28 @@ pub fn cql_to_py<'a>(
                 .iter()
                 .map(|val| cql_to_py(py, col_name, column_type.as_ref(), Some(val)))
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(items.to_object(py).into_ref(py))
+            Ok(items.into_bound_py_any(py)?)
         }
         ColumnType::Map(key_type, val_type) => {
             let map_values = unwrapped_value
                 .as_map()
                 .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Map"))?
                 .iter()
-                .map(|(key, val)| -> ScyllaPyResult<(&'a PyAny, &'a PyAny)> {
-                    Ok((
-                        cql_to_py(py, col_name, key_type, Some(key))?,
-                        cql_to_py(py, col_name, val_type, Some(val))?,
-                    ))
-                })
+                .map(
+                    |(key, val)| -> ScyllaPyResult<(Bound<'a, PyAny>, Bound<'a, PyAny>)> {
+                        Ok((
+                            cql_to_py(py, col_name, key_type, Some(key))?,
+                            cql_to_py(py, col_name, val_type, Some(val))?,
+                        ))
+                    },
+                )
                 .collect::<Result<Vec<_>, _>>()?;
 
             let res_map = PyDict::new(py);
             for (key, value) in map_values {
                 res_map.set_item(key, value)?;
             }
-            Ok(res_map)
+            Ok(res_map.into_any())
         }
         ColumnType::Set(column_type) => {
             let items = unwrapped_value
@@ -420,7 +426,7 @@ pub fn cql_to_py<'a>(
                 .map(|val| cql_to_py(py, col_name, column_type.as_ref(), Some(val)))
                 .collect::<Result<Vec<_>, _>>()?;
             let res_set = PySet::new(py, items)?;
-            Ok(res_set)
+            Ok(res_set.into_any())
         }
         ColumnType::SmallInt => unwrapped_value
             .as_smallint()
@@ -428,14 +434,14 @@ pub fn cql_to_py<'a>(
                 col_name.into(),
                 "SmallInt",
             ))
-            .map(|val| val.to_object(py).into_ref(py)),
+            .and_then(|val| val.into_bound_py_any(py).map_err(Into::into)),
         ColumnType::TinyInt => unwrapped_value
             .as_tinyint()
             .ok_or(ScyllaPyError::ValueDowncastError(
                 col_name.into(),
                 "TinyInt",
             ))
-            .map(|val| val.to_object(py).into_ref(py)),
+            .and_then(|val| val.into_bound_py_any(py).map_err(Into::into)),
         ColumnType::Uuid => {
             let uuid_str = unwrapped_value
                 .as_uuid()
@@ -478,7 +484,7 @@ pub fn cql_to_py<'a>(
                 .import("dateutil")?
                 .getattr("relativedelta")?
                 .getattr("relativedelta")?
-                .call((), Some(kwargs))?)
+                .call((), Some(&kwargs))?)
         }
         ColumnType::Timestamp => {
             // Timestamp - num of milliseconds since unix epoch.
@@ -521,18 +527,16 @@ pub fn cql_to_py<'a>(
                 (timestamp.timestamp_millis() as f64 / 1000f64,),
             )?)
         }
-        ColumnType::Inet => Ok(unwrapped_value
+        ColumnType::Inet => unwrapped_value
             .as_inet()
-            .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Inet"))?
-            .to_object(py)
-            .into_ref(py)),
+            .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Inet"))
+            .and_then(|val| val.into_bound_py_any(py).map_err(Into::into)),
         ColumnType::Date => {
             let formatted_date = unwrapped_value
                 .as_date()
                 .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "Date"))?
                 .format(DATE_FORMAT)
-                .map_err(|_| ScyllaPyError::ValueDowncastError(col_name.into(), "Date"))?
-                .to_string();
+                .map_err(|_| ScyllaPyError::ValueDowncastError(col_name.into(), "Date"))?;
             Ok(py
                 .import("datetime")?
                 .getattr("date")?
@@ -544,20 +548,18 @@ pub fn cql_to_py<'a>(
                 for (col_type, col_val) in types.iter().zip(data) {
                     dumped_elemets.push(cql_to_py(py, col_name, col_type, col_val.as_ref())?);
                 }
-                Ok(PyTuple::new(py, dumped_elemets))
+                Ok(PyTuple::new(py, dumped_elemets)?.into_any())
             } else {
                 Err(ScyllaPyError::ValueDowncastError(col_name.into(), "Tuple"))
             }
         }
-        ColumnType::Counter => Ok(unwrapped_value
+        ColumnType::Counter => unwrapped_value
             .as_counter()
             .ok_or(ScyllaPyError::ValueDowncastError(
                 col_name.into(),
                 "Counter",
-            ))?
-            .0
-            .to_object(py)
-            .into_ref(py)),
+            ))
+            .and_then(|val| val.0.into_bound_py_any(py).map_err(Into::into)),
         ColumnType::Time => {
             let time = unwrapped_value
                 .as_time()
@@ -570,7 +572,7 @@ pub fn cql_to_py<'a>(
             Ok(py
                 .import("datetime")?
                 .getattr("time")?
-                .call((), Some(kwargs))?)
+                .call((), Some(&kwargs))?)
         }
         ColumnType::UserDefinedType {
             type_name,
@@ -588,7 +590,7 @@ pub fn cql_to_py<'a>(
                 .as_udt()
                 .ok_or(ScyllaPyError::ValueDowncastError(col_name.into(), "UDT"))?
                 .iter()
-                .map(|(key, val)| -> ScyllaPyResult<(&str, &'a PyAny)> {
+                .map(|(key, val)| -> ScyllaPyResult<(&str, Bound<'a, PyAny>)> {
                     let column_type = fields.get(key.as_str()).ok_or_else(|| {
                         ScyllaPyError::UDTDowncastError(
                             format!("{keyspace}.{type_name}"),
@@ -607,7 +609,7 @@ pub fn cql_to_py<'a>(
             for (key, value) in map_values {
                 res_map.set_item(key, value)?;
             }
-            Ok(res_map)
+            Ok(res_map.into_any())
         }
         ColumnType::Decimal => {
             // Because the `as_decimal` method is not implemented for `CqlValue`,
@@ -656,7 +658,7 @@ pub fn cql_to_py<'a>(
 /// May result in error if any of parameters cannot
 /// be parsed.
 pub fn parse_python_query_params(
-    params: Option<&PyAny>,
+    params: Option<&Bound<'_, PyAny>>,
     allow_dicts: bool,
     col_spec: Option<&[ColumnSpec]>,
 ) -> ScyllaPyResult<LegacySerializedValues> {
@@ -669,7 +671,7 @@ pub fn parse_python_query_params(
     // If list was passed, we construct only unnamed parameters.
     // Otherwise it parses dict to named parameters.
     if params.is_instance_of::<PyList>() || params.is_instance_of::<PyTuple>() {
-        let params = params.extract::<Vec<&PyAny>>()?;
+        let params = params.extract::<Vec<Bound<'_, PyAny>>>()?;
         for (index, param) in params.iter().enumerate() {
             let coltype = col_spec.and_then(|specs| specs.get(index)).map(|f| &f.typ);
             let py_dto = py_to_value(param, coltype)?;
@@ -687,12 +689,15 @@ pub fn parse_python_query_params(
                 })
                 .unwrap_or_default();
             // let map = HashMap::with_capacity_and_hasher(, hasher)
-            let dict = params
-                .extract::<HashMap<&str, &PyAny, BuildHasherDefault<rustc_hash::FxHasher>>>()?;
+            let dict = params.extract::<HashMap<
+                String,
+                Bound<'_, PyAny>,
+                BuildHasherDefault<rustc_hash::FxHasher>,
+            >>()?;
             for (name, value) in dict {
                 values.add_named_value(
                     name.to_lowercase().as_str(),
-                    &py_to_value(value, types_map.get(name))?,
+                    &py_to_value(&value, types_map.get(name.as_str()))?,
                 )?;
             }
             return Ok(values);
@@ -720,25 +725,22 @@ pub fn parse_python_query_params(
 /// * At least one row cannot be casted to dict.
 pub fn map_rows<'a>(
     py: Python<'a>,
-    rows: &'a Py<PyAny>,
+    rows: &'a Bound<'a, PyAny>,
     as_class: &'a Py<PyAny>,
 ) -> ScyllaPyResult<Vec<Py<PyAny>>> {
     let mapped_rows = rows
-        .downcast::<PyList>(py)
+        .cast::<PyList>()
         .map_err(|err| {
             ScyllaPyError::RowsDowncastError(format!("Cannot downcast rows to list. {err}"))
         })?
         .iter()
         .map(|obj| {
-            as_class.call(
-                py,
-                (),
-                Some(obj.downcast::<PyDict>().map_err(|err| {
-                    ScyllaPyError::RowsDowncastError(format!(
-                        "Cannot preapre kwargs for mapping. {err}"
-                    ))
-                })?),
-            )
+            let kwargs = obj.cast::<PyDict>().map_err(|err| {
+                ScyllaPyError::RowsDowncastError(format!(
+                    "Cannot preapre kwargs for mapping. {err}"
+                ))
+            })?;
+            as_class.call(py, (), Some(kwargs))
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(mapped_rows)

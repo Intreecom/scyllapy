@@ -1,4 +1,8 @@
-use pyo3::{create_exception, types::PyModule, PyResult, Python};
+use pyo3::{
+    create_exception,
+    types::{PyModule, PyModuleMethods},
+    Bound, PyResult, Python,
+};
 
 create_exception!(
     scyllapy.exceptions,
@@ -23,7 +27,7 @@ create_exception!(
 /// # Errors
 ///
 /// May throw an error, if module cannot be constructed.
-pub fn setup_module(py: Python<'_>, module: &PyModule) -> PyResult<()> {
+pub fn setup_module(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("ScyllaPyBaseError", py.get_type::<ScyllaPyBaseError>())?;
     module.add("ScyllaPyDBError", py.get_type::<ScyllaPyDBError>())?;
     module.add(

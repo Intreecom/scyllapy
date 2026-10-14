@@ -9,9 +9,9 @@ from ._internal.exceptions import (
 
 __all__ = (
     "ScyllaPyBaseError",
+    "ScyllaPyBindingError",
     "ScyllaPyDBError",
-    "ScyllaPySessionError",
     "ScyllaPyMappingError",
     "ScyllaPyQueryBuiderError",
-    "ScyllaPyBindingError",
+    "ScyllaPySessionError",
 )

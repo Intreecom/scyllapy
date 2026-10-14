@@ -1,11 +1,12 @@
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from typing import Any, Callable
+from typing import Any
 
 import pytest
-from tests.utils import random_string
-
 from scyllapy import Scylla, extra_types
 from scyllapy.exceptions import ScyllaPyDBError
+
+from tests.utils import random_string
 
 
 @pytest.mark.anyio
