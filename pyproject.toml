@@ -1,5 +1,5 @@
 [project]
-name = "scyllapy"
+name = "scyllapy-tmp"
 description = "Async scylla driver for python"
 readme = "README.md"
 requires-python = ">=3.11,<4"
