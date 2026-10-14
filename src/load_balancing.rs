@@ -2,15 +2,15 @@ use std::sync::Arc;
 
 use pyo3::{
     pyclass, pymethods,
-    types::{PyModule, PyType},
-    PyAny, PyResult, Python,
+    types::{PyModule, PyModuleMethods, PyType},
+    Bound, PyAny, PyResult, Python,
 };
 use scylla::load_balancing::{DefaultPolicy, LatencyAwarenessBuilder, LoadBalancingPolicy};
 use std::time::Duration;
 
 use crate::{exceptions::rust_err::ScyllaPyResult, utils::scyllapy_future};
 
-#[pyclass(name = "LoadBalancingPolicy")]
+#[pyclass(name = "LoadBalancingPolicy", from_py_object)]
 #[derive(Clone, Debug)]
 pub struct ScyllaPyLoadBalancingPolicy {
     inner: Arc<dyn LoadBalancingPolicy>,
@@ -29,15 +29,15 @@ impl ScyllaPyLoadBalancingPolicy {
         latency_awareness = None,
     )
     )]
-    fn build(
-        cls: &PyType,
+    fn build<'py>(
+        cls: &Bound<'py, PyType>,
         token_aware: Option<bool>,
         prefer_rack: Option<String>,
         prefer_datacenter: Option<String>,
         permit_dc_failover: Option<bool>,
         shuffling_replicas: Option<bool>,
         latency_awareness: Option<ScyllaPyLatencyAwareness>,
-    ) -> ScyllaPyResult<&PyAny> {
+    ) -> ScyllaPyResult<Bound<'py, PyAny>> {
         scyllapy_future(cls.py(), async move {
             let mut policy_builer = DefaultPolicy::builder();
             if let Some(permit) = permit_dc_failover {
@@ -66,7 +66,7 @@ impl ScyllaPyLoadBalancingPolicy {
     }
 }
 
-#[pyclass(name = "LatencyAwareness")]
+#[pyclass(name = "LatencyAwareness", from_py_object)]
 #[derive(Clone, Debug)]
 pub struct ScyllaPyLatencyAwareness {
     inner: LatencyAwarenessBuilder,
@@ -129,7 +129,7 @@ impl From<ScyllaPyLoadBalancingPolicy> for Arc<dyn LoadBalancingPolicy> {
 /// # Errors
 ///
 /// If cannot add class to the module.
-pub fn setup_module(_py: Python<'_>, module: &PyModule) -> PyResult<()> {
+pub fn setup_module(_py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<ScyllaPyLoadBalancingPolicy>()?;
     module.add_class::<ScyllaPyLatencyAwareness>()?;
     Ok(())

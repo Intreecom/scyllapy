@@ -8,7 +8,7 @@ use crate::{
     load_balancing::ScyllaPyLoadBalancingPolicy,
 };
 
-#[pyclass(name = "ExecutionProfile")]
+#[pyclass(name = "ExecutionProfile", from_py_object)]
 #[derive(Clone, Debug)]
 pub struct ScyllaPyExecutionProfile {
     inner: scylla::ExecutionProfile,

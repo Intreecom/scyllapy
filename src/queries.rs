@@ -5,7 +5,11 @@ use crate::{
     exceptions::rust_err::ScyllaPyResult,
     execution_profiles::ScyllaPyExecutionProfile,
 };
-use pyo3::{pyclass, pymethods, types::PyDict, FromPyObject, Python};
+use pyo3::{
+    pyclass, pymethods,
+    types::{PyAnyMethods, PyDict, PyDictMethods},
+    Bound, FromPyObject, PyErr, Python,
+};
 use scylla::{batch::Batch, execution_profile::ExecutionProfileHandle, statement::query::Query};
 
 #[derive(Clone, Debug, Default, FromPyObject)]
@@ -60,44 +64,44 @@ impl ScyllaPyRequestParams {
     ///
     /// May result in an error if
     /// incorrect type passed.
-    pub fn from_dict(params: Option<&PyDict>) -> ScyllaPyResult<Self> {
+    pub fn from_dict(params: Option<&Bound<'_, PyDict>>) -> ScyllaPyResult<Self> {
         let Some(params) = params else {
             return Ok(Self::default());
         };
         Ok(Self {
             consistency: params
                 .get_item("consistency")?
-                .map(pyo3::FromPyObject::extract)
+                .map(|obj| obj.extract().map_err(PyErr::from))
                 .transpose()?,
             serial_consistency: params
                 .get_item("serial_consistency")?
-                .map(pyo3::FromPyObject::extract)
+                .map(|obj| obj.extract().map_err(PyErr::from))
                 .transpose()?,
             request_timeout: params
                 .get_item("request_timeout")?
-                .map(pyo3::FromPyObject::extract)
+                .map(|obj| obj.extract())
                 .transpose()?,
             timestamp: params
                 .get_item("timestamp")?
-                .map(pyo3::FromPyObject::extract)
+                .map(|obj| obj.extract())
                 .transpose()?,
             is_idempotent: params
                 .get_item("is_idempotent")?
-                .map(pyo3::FromPyObject::extract)
+                .map(|obj| obj.extract())
                 .transpose()?,
             tracing: params
                 .get_item("tracing")?
-                .map(pyo3::FromPyObject::extract)
+                .map(|obj| obj.extract())
                 .transpose()?,
             profile: params
                 .get_item("profile")?
-                .map(pyo3::FromPyObject::extract)
+                .map(|obj| obj.extract().map_err(PyErr::from))
                 .transpose()?,
         })
     }
 }
 
-#[pyclass(name = "Query")]
+#[pyclass(name = "Query", from_py_object)]
 #[derive(Clone, Debug)]
 pub struct ScyllaPyQuery {
     #[pyo3(get)]
@@ -123,7 +127,11 @@ impl ScyllaPyQuery {
     ///
     /// # Errors
     /// May raise an error if incorrect type passed in kwargs.
-    pub fn py_new(_py: Python<'_>, query: String, kwargs: Option<&PyDict>) -> ScyllaPyResult<Self> {
+    pub fn py_new(
+        _py: Python<'_>,
+        query: String,
+        kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> ScyllaPyResult<Self> {
         Ok(Self {
             query,
             params: ScyllaPyRequestParams::from_dict(kwargs)?,

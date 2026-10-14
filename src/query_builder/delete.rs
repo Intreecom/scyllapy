@@ -1,4 +1,4 @@
-use pyo3::{pyclass, pymethods, types::PyDict, PyAny, PyRefMut, Python};
+use pyo3::{pyclass, pymethods, types::PyDict, Bound, PyAny, PyRefMut, Python};
 use scylla::{frame::value::LegacySerializedValues, query::Query};
 
 use super::utils::{pretty_build, IfCluase, Timeout};
@@ -10,7 +10,7 @@ use crate::{
     utils::{py_to_value, ScyllaPyCQLDTO},
 };
 
-#[pyclass]
+#[pyclass(skip_from_py_object)]
 #[derive(Clone, Debug, Default)]
 pub struct Delete {
     table_: String,
@@ -104,12 +104,12 @@ impl Delete {
     pub fn r#where<'a>(
         mut slf: PyRefMut<'a, Self>,
         clause: String,
-        values: Option<Vec<&'a PyAny>>,
+        values: Option<Vec<Bound<'a, PyAny>>>,
     ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         slf.where_clauses_.push(clause);
         if let Some(vals) = values {
             for value in vals {
-                slf.values_.push(py_to_value(value, None)?);
+                slf.values_.push(py_to_value(&value, None)?);
             }
         }
         Ok(slf)
@@ -143,7 +143,7 @@ impl Delete {
     pub fn if_<'a>(
         mut slf: PyRefMut<'a, Self>,
         clause: String,
-        values: Option<Vec<&'a PyAny>>,
+        values: Option<Vec<Bound<'a, PyAny>>>,
     ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         let parsed_values = if let Some(vals) = values {
             vals.iter()
@@ -178,7 +178,7 @@ impl Delete {
     #[pyo3(signature = (**params))]
     pub fn request_params<'a>(
         mut slf: PyRefMut<'a, Self>,
-        params: Option<&'a PyDict>,
+        params: Option<&'a Bound<'a, PyDict>>,
     ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         slf.request_params_ = ScyllaPyRequestParams::from_dict(params)?;
         Ok(slf)
@@ -191,7 +191,11 @@ impl Delete {
     /// May return an error, if something goes wrong
     /// during query building
     /// or during query execution.
-    pub fn execute<'a>(&'a self, py: Python<'a>, scylla: &'a Scylla) -> ScyllaPyResult<&'a PyAny> {
+    pub fn execute<'a>(
+        &'a self,
+        py: Python<'a>,
+        scylla: &'a Bound<'a, Scylla>,
+    ) -> ScyllaPyResult<Bound<'a, PyAny>> {
         let mut query = Query::new(self.build_query()?);
         self.request_params_.apply_to_query(&mut query);
 
@@ -200,7 +204,9 @@ impl Delete {
         } else {
             self.values_.clone()
         };
-        scylla.native_execute(py, Some(query), None, values, false)
+        scylla
+            .get()
+            .native_execute(py, Some(query), None, values, false)
     }
 
     /// Add to batch
@@ -249,7 +255,7 @@ impl Delete {
     }
 
     #[must_use]
-    pub fn __deepcopy__(&self, _memo: &PyDict) -> Self {
+    pub fn __deepcopy__(&self, _memo: &Bound<'_, PyDict>) -> Self {
         self.clone()
     }
 }

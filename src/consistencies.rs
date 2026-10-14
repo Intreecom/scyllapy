@@ -5,7 +5,7 @@ use scylla::statement::{Consistency, SerialConsistency};
 ///
 /// This class allows to run queries
 /// with specific consistency levels.
-#[pyclass(name = "Consistency")]
+#[pyclass(name = "Consistency", from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[allow(non_camel_case_types)]
 pub enum ScyllaPyConsistency {
@@ -22,7 +22,7 @@ pub enum ScyllaPyConsistency {
     LOCAL_SERIAL,
 }
 
-#[pyclass(name = "SerialConsistency")]
+#[pyclass(name = "SerialConsistency", from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[allow(non_camel_case_types)]
 pub enum ScyllaPySerialConsistency {

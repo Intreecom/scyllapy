@@ -1,4 +1,8 @@
-use pyo3::{pyclass, pymethods, types::PyDict, PyAny, PyRefMut, Python};
+use pyo3::{
+    pyclass, pymethods,
+    types::{PyAnyMethods, PyDict},
+    Bound, PyAny, PyRefMut, Python,
+};
 use scylla::{frame::value::LegacySerializedValues, query::Query};
 
 use crate::{
@@ -11,8 +15,9 @@ use crate::{
 
 use super::utils::{pretty_build, Timeout};
 
-#[pyclass]
+#[pyclass(skip_from_py_object)]
 #[derive(Clone, Debug, Default)]
+#[allow(clippy::struct_field_names)]
 pub struct Insert {
     table_: String,
     if_not_exists_: bool,
@@ -106,7 +111,7 @@ impl Insert {
     pub fn set<'a>(
         mut slf: PyRefMut<'a, Self>,
         name: String,
-        value: &'a PyAny,
+        value: &'a Bound<'a, PyAny>,
     ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         slf.names_.push(name);
         // Small optimization to speedup inserts.
@@ -147,7 +152,7 @@ impl Insert {
     #[pyo3(signature = (**params))]
     pub fn request_params<'a>(
         mut slf: PyRefMut<'a, Self>,
-        params: Option<&'a PyDict>,
+        params: Option<&'a Bound<'a, PyDict>>,
     ) -> ScyllaPyResult<PyRefMut<'a, Self>> {
         slf.request_params_ = ScyllaPyRequestParams::from_dict(params)?;
         Ok(slf)
@@ -161,10 +166,16 @@ impl Insert {
     ///
     /// If query cannot be built.
     /// Also proxies errors from `native_execute`.
-    pub fn execute<'a>(&'a self, py: Python<'a>, scylla: &'a Scylla) -> ScyllaPyResult<&'a PyAny> {
+    pub fn execute<'a>(
+        &'a self,
+        py: Python<'a>,
+        scylla: &'a Bound<'a, Scylla>,
+    ) -> ScyllaPyResult<Bound<'a, PyAny>> {
         let mut query = Query::new(self.build_query()?);
         self.request_params_.apply_to_query(&mut query);
-        scylla.native_execute(py, Some(query), None, self.values_.clone(), false)
+        scylla
+            .get()
+            .native_execute(py, Some(query), None, self.values_.clone(), false)
     }
 
     /// Add to batch
@@ -206,7 +217,7 @@ impl Insert {
     }
 
     #[must_use]
-    pub fn __deepcopy__(&self, _memo: &PyDict) -> Self {
+    pub fn __deepcopy__(&self, _memo: &Bound<'_, PyDict>) -> Self {
         self.clone()
     }
 }

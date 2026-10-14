@@ -1,4 +1,4 @@
-use pyo3::{pyclass, pymethods, types::PyDict, PyAny};
+use pyo3::{pyclass, pymethods, types::PyDict, Bound, PyAny};
 use scylla::{
     batch::{Batch, BatchStatement, BatchType},
     frame::value::LegacySerializedValues,
@@ -9,7 +9,7 @@ use crate::{
     utils::parse_python_query_params,
 };
 
-#[pyclass(name = "BatchType")]
+#[pyclass(name = "BatchType", from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ScyllaPyBatchType {
     COUNTER,
@@ -17,14 +17,14 @@ pub enum ScyllaPyBatchType {
     UNLOGGED,
 }
 
-#[pyclass(name = "Batch")]
+#[pyclass(name = "Batch", from_py_object)]
 #[derive(Clone)]
 pub struct ScyllaPyBatch {
     inner: Batch,
     request_params: ScyllaPyRequestParams,
 }
 
-#[pyclass(name = "InlineBatch")]
+#[pyclass(name = "InlineBatch", from_py_object)]
 #[derive(Clone)]
 pub struct ScyllaPyInlineBatch {
     inner: Batch,
@@ -60,7 +60,10 @@ impl ScyllaPyBatch {
         batch_type = ScyllaPyBatchType::UNLOGGED,
         **params
     ))]
-    pub fn py_new(batch_type: ScyllaPyBatchType, params: Option<&PyDict>) -> ScyllaPyResult<Self> {
+    pub fn py_new(
+        batch_type: ScyllaPyBatchType,
+        params: Option<&Bound<'_, PyDict>>,
+    ) -> ScyllaPyResult<Self> {
         Ok(Self {
             inner: Batch::new(batch_type.into()),
             request_params: ScyllaPyRequestParams::from_dict(params)?,
@@ -96,7 +99,10 @@ impl ScyllaPyInlineBatch {
         batch_type = ScyllaPyBatchType::UNLOGGED,
         **params
     ))]
-    pub fn py_new(batch_type: ScyllaPyBatchType, params: Option<&PyDict>) -> ScyllaPyResult<Self> {
+    pub fn py_new(
+        batch_type: ScyllaPyBatchType,
+        params: Option<&Bound<'_, PyDict>>,
+    ) -> ScyllaPyResult<Self> {
         Ok(Self {
             inner: Batch::new(batch_type.into()),
             request_params: ScyllaPyRequestParams::from_dict(params)?,
@@ -118,7 +124,7 @@ impl ScyllaPyInlineBatch {
     pub fn add_query(
         &mut self,
         query: BatchQueryInput,
-        values: Option<&PyAny>,
+        values: Option<&Bound<'_, PyAny>>,
     ) -> ScyllaPyResult<()> {
         self.inner.append_statement(query);
         if let Some(passed_params) = values {
