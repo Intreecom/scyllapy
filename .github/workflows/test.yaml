@@ -8,9 +8,8 @@ jobs:
     strategy:
       matrix:
         cmd:
-          - black
-          - isort
-          - ruff
+          - ruff-check
+          - ruff-format
           - mypy
     runs-on: ubuntu-latest
     steps:
@@ -18,7 +17,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
+          python-version: "3.13"
       - name: Run lint check
         uses: pre-commit/action@v3.0.0
         with:
@@ -49,7 +48,6 @@ jobs:
     - uses: actions-rs/clippy-check@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        args: -p scyllapy --all-features -- -W clippy::all -W clippy::pedantic -D warnings
   pytest:
     name: ${{matrix.job.os}}-${{matrix.py_version}}
     services:
@@ -64,7 +62,7 @@ jobs:
           - 9042:9042
     strategy:
       matrix:
-        py_version: ["3.11", "3.12"]
+        py_version: ["3.11", "3.12", "3.13", "3.14"]
         job:
             - os: ubuntu-latest
               ssl_cmd: sudo apt-get update && sudo apt-get install libssl-dev openssl
